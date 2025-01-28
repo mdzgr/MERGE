@@ -152,8 +152,9 @@ def filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process
     # print(filtered)
     return filtered
 
-def process_unmasked_dataset(filtered_list_1) -> List[Dict]:
+def process_unmasked_dataset(filtered_list_1, id) -> List[Dict]:
   new_list4 = []
+  
   label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
 
   if isinstance(filtered_list_1, dict):
@@ -165,12 +166,21 @@ def process_unmasked_dataset(filtered_list_1) -> List[Dict]:
   for i in tqdm(filtered_list_1):
       # print(i)
       label = i['label']
-      new_list4.append({
-          'premise': i['premise'],
-          'hypothesis': i['hypothesis'],
-          'label': {'contradiction': 2, 'entailment': 0, 'neutral': 1}[label]
-      })
-      label_counts[label] += 1
+      if id=='yes':
+        new_list4.append({
+            'id':i['id'],
+            'premise': i['premise'],
+            'hypothesis': i['hypothesis'],
+            'label': {'contradiction': 2, 'entailment': 0, 'neutral': 1}[label]
+        })
+        label_counts[label] += 1
+      if id =='no':
+        new_list4.append({
+            'premise': i['premise'],
+            'hypothesis': i['hypothesis'],
+            'label': {'contradiction': 2, 'entailment': 0, 'neutral': 1}[label]
+        })
+        label_counts[label] += 1
 
   print("Label counts:", label_counts)
 
@@ -187,7 +197,8 @@ def create_filler_masked_dataset(
     to_mask: str,
     num_sentences_to_process: int = None,
     output_format: str = 'list',
-    output_file: str = None
+    output_file: str = None, 
+    output_file_2: str= None
 ) -> List[Dict]:
 
     label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
@@ -219,10 +230,25 @@ def create_filler_masked_dataset(
           })
     print(f"no. problems filtered after criteria: {len(filtered_list_1)}")
     if to_mask=='no':
-      new_list4 = process_unmasked_dataset(filtered_list_1)
-      return new_list4
+      new_list4 = process_unmasked_dataset(filtered_list_1, id='no')
+      new_list_3 = process_unmasked_dataset(filtered_list_1, id='yes')
+      if output_format == 'txt' and output_file:
+          with open(output_file, 'w') as file:
+              model_details = f"\"fill-mask\", model=\"{model_name}\""
+              file.write(f"\n{model_details}\n")
+              for entry in filtered_list_1:
+
+                  id = entry['id']
+                  premise = entry['premise']
+                  hypothesis = entry['hypothesis']
+                  label = entry['label']
+
+                  file.write(f"\n{id}: {label}\n{premise}\n{hypothesis}\n")
+                
+          return new_list4, new_list_3
+      return new_list4, new_list_3
     else:
-      new_list3 = process_unmasked_dataset(filtered_list_1)
+      new_list3 = process_unmasked_dataset(filtered_list_1, id='yes')
       filler_pipeline = pipeline("fill-mask", model=model_name)
       words_overall2 = []
       for p in tqdm(filtered_list_1):
@@ -324,6 +350,24 @@ def create_filler_masked_dataset(
           label_counts[label] += len(i['new_h_p'])
 
       print("Label counts:", label_counts)
+
+      if output_format == 'txt' and output_file:
+          with open(output_file, 'w') as file:
+              model_details = f"\"fill-mask\", model=\"{model_name}\""
+              file.write(f"\n{model_details}\n")
+              for entry in words_overall2[:100]:
+                id = entry['id']
+                premise = entry['premise']
+                hypothesis = entry['hypothesis']
+                label = entry['label']
+                ranks = entry['ranks']
+                for w, ranked_fillers in ranks.items():
+                  p_masked = re.sub(rf'\b{w}\b', f'[{w}]', premise)
+                  h_masked = re.sub(rf'\b{w}\b', f'[{w}]', hypothesis)
+
+                  file.write(f"\n{id}: {label}\n{p_masked}\n{h_masked}\n")
+                  for f, v in ranked_fillers:
+                    file.write(f"{round(v['average_rank']):>2} {f:<20} {v['ranks']} {v['average_prob']}   {v['individual_probs']}\n")
 
       if output_format == 'txt' and output_file:
           with open(output_file, 'w') as file:
