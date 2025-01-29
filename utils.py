@@ -186,6 +186,7 @@ def process_unmasked_dataset(filtered_list_1, id) -> List[Dict]:
 
   return new_list4
 
+
 def create_filler_masked_dataset(
     model_name: str,
     dataset: pd.DataFrame,
@@ -197,9 +198,30 @@ def create_filler_masked_dataset(
     to_mask: str,
     num_sentences_to_process: int = None,
     output_format: str = 'list',
-    output_file: str = None, 
-    output_file_2: str= None
+    output_file: str = None,
+    output_file_2: str= None,
+    separate_by_pos: str = 'no'
 ) -> List[Dict]:
+
+    """
+        Function generating a new inflated dataset with suggestion from a language model, alongside the initial split of sentences modified
+
+        model_name : str // name of language model used for generating masked token predictions (e.g., "bert-base-uncased").
+        dataset : Dataset // The dataset to process
+        split : str // The dataset split to use (e.g., "train", "test", "validation").
+        pos_to_mask : str // a str indicating what pos to be masked in sentences ('noun' or 'verb'), and what sentences to be picked for masking considering trhe min_common_words (e.g. 3 common nouns)
+        min_common_words : int// the minimum number of common words required between premise and hypothesis
+        num_filler_suggestions : int// The number of suggested filler words for each masked token by model
+        rank_w : slice or int // the ranking range/ the specific filler suggestions that will be part of the new dataset
+        to_mask : str // Whether to return a dataset with inflated options or not, if 'no' > output are 2 datasets, unmasked sentences that have the no. min of common pos tags indicated, with (second returned dictionary) and with no ids 
+                      // if 'yes' > returns 2 datasets, first dataset containts the new obtained dataset after inlafting with masked suggestions, second dictionaries stores the initial filtered dataset for masking, before masking.
+        num_sentences_to_process : int /// The number of sentences to process from the dataset.
+        output_format : str // The format of the output file
+        output_file : str /// file name where the masked dataset  will be saved
+        output_file_2 : str // name of a second output file that will store all the ranked words of first 100 examples of the dataset
+        separate_by_pos : str // If 'yes', returnes a masked dictionary and output_file_2 grouped by pos tags
+
+    """
 
     label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
     new_list4 = []
@@ -244,7 +266,7 @@ def create_filler_masked_dataset(
                   label = entry['label']
 
                   file.write(f"\n{id}: {label}\n{premise}\n{hypothesis}\n")
-                
+
           return new_list4, new_list_3
       return new_list4, new_list_3
     else:
@@ -256,7 +278,7 @@ def create_filler_masked_dataset(
 
           p_dictionary = extract_nouns(pos_p, tok_p, 'premise', pos_to_mask)
           h_dictionary = extract_nouns(pos_h, tok_h, 'hypothesis', pos_to_mask)
-
+          
           all_nouns_singles = {' ' + k for d in [p_dictionary, h_dictionary] for k, v in d.items()}
 
           common_tokens_dictionary = set(p_dictionary.keys()).intersection(h_dictionary.keys())
@@ -280,34 +302,42 @@ def create_filler_masked_dataset(
 
           word2fillers = defaultdict(list)
           word2probabilities = defaultdict(list)
-          word2sequences = defaultdict(list)
+          word2pos=defaultdict(list)
           for key, value in combined_p_h.items():
+
               for i in value:
                   positions = i['positions'][0]
                   source = i['source']
+                  pos=i['pos']
+           
                   if source == 'premise' and positions in p_off_filler:
                       fillers = p_off_filler[positions]
                       word2fillers[key].append(list(fillers.keys()))
                       word2probabilities[key].append([val['score'] for val in fillers.values() if 'score' in val])
-                      word2sequences[key].append([val['sequence'] for val in fillers.values() if 'sequence' in val])
+                      word2pos[key].append(pos)
+
                   if source == 'hypothesis' and positions in h_off_filler:
                       fillers = h_off_filler[positions]
                       word2fillers[key].append(list(fillers.keys()))
                       word2probabilities[key].append([val['score'] for val in fillers.values() if 'score' in val])
-                      word2sequences[key].append([val['sequence'] for val in fillers.values() if 'sequence' in val])
-
+                      word2pos[key].append(pos)
+                   
+          
           words = {}
           for w in word2fillers:
+
               words[w] = ranked_overlap(word2fillers[w], word2probabilities[w]).items()
               words[w] = sorted(words[w], key=lambda x: x[1]["average_rank"])
-
+              
           words_overall2.append({
               'id': id,
               'premise': premise,
               'label': p['label'],
               'hypothesis': hypothesis,
-              'ranks': words
+              'ranks': words,
+
           })
+
 
       new_dataset_1 = []
       for entry in words_overall2:
@@ -322,67 +352,106 @@ def create_filler_masked_dataset(
                   best_ = ranked_fillers[rank_w][0].strip()
                   p_masked = re.sub(rf'\b{w}\b', best_, premise)
                   h_masked = re.sub(rf'\b{w}\b', best_, hypothesis)
+            
+                  pos_1=word2pos[w]
+
                   new_[w] = {'premise': p_masked, 'hypothesis': h_masked}
+
               elif isinstance(rank_w, slice):
 
                   for i in range(*rank_w.indices(len(ranked_fillers))):
+                      # print(w)
                       best_ = ranked_fillers[i][0].strip()
                       p_masked = re.sub(rf'\b{w}\b', best_, premise)
                       h_masked = re.sub(rf'\b{w}\b', best_, hypothesis)
-                      new_[f"{w}_{i}"] = {'premise': p_masked, 'hypothesis': h_masked}
+              
+                      pos_1=word2pos[w]
+        
+                      new_[f"{w}_{i}"] = {'premise': p_masked, 'hypothesis': h_masked, 'pos': pos_1}
+
               else:
                   raise ValueError("rank_w must be an integer or a slice.")
             except IndexError:
               break
           new_dataset_1.append({'id': id, 'premise': premise, 'label': label, 'hypothesis': hypothesis, 'new_h_p': new_})
-
+ 
       for i in tqdm(new_dataset_1):
           label = i['label']
-          new_list4.extend([
-              {
-                  'premise': value['premise'],
-                  'hypothesis': value['hypothesis'],
-                  'label': {'contradiction': 0, 'entailment': 1, 'neutral': 2}[label]
-              }
-              for key, value in i['new_h_p'].items()
-              if isinstance(value, dict) and 'premise' in value and 'hypothesis' in value
-          ])
+          pos_tagged_dataset = defaultdict(list)
+
+          for key, value in i['new_h_p'].items():
+              if isinstance(value, dict) and 'premise' in value and 'hypothesis' in value:
+                  if separate_by_pos == 'yes':
+                      pos_tagged_dataset[value['pos'][0]].append({
+                          'premise': value['premise'],
+                          'hypothesis': value['hypothesis'],
+                          'label': {'contradiction': 0, 'entailment': 1, 'neutral': 2}[label],
+                      })
+                    
+                  else:
+                      new_list4.append({
+                          'premise': value['premise'],
+                          'hypothesis': value['hypothesis'],
+                          'label': {'contradiction': 0, 'entailment': 1, 'neutral': 2}[label]
+                      })
           label_counts[label] += len(i['new_h_p'])
 
-      print("Label counts:", label_counts)
+          if separate_by_pos == 'yes':
+              for pos, entries in pos_tagged_dataset.items():
+                  new_list4.append({pos: entries})
 
-      if output_format == 'txt' and output_file:
-          with open(output_file, 'w') as file:
+
+      print("Label counts of generated inflated problems:", label_counts)
+
+      if output_format == 'txt' and output_file_2:
+          with open(output_file_2, 'w') as file:
               model_details = f"\"fill-mask\", model=\"{model_name}\""
               file.write(f"\n{model_details}\n")
               for entry in words_overall2[:100]:
-                id = entry['id']
-                premise = entry['premise']
-                hypothesis = entry['hypothesis']
-                label = entry['label']
-                ranks = entry['ranks']
-                for w, ranked_fillers in ranks.items():
-                  p_masked = re.sub(rf'\b{w}\b', f'[{w}]', premise)
-                  h_masked = re.sub(rf'\b{w}\b', f'[{w}]', hypothesis)
+                id, premise, hypothesis, label, ranks = entry['id'], entry['premise'], entry['hypothesis'], entry['label'], entry['ranks']
+            
+                if separate_by_pos == 'yes':
+                  pos_grouped = defaultdict(list)
 
-                  file.write(f"\n{id}: {label}\n{p_masked}\n{h_masked}\n")
-                  for f, v in ranked_fillers:
-                    file.write(f"{round(v['average_rank']):>2} {f:<20} {v['ranks']} {v['average_prob']}   {v['individual_probs']}\n")
+                  
+                  for w, ranked_fillers in ranks.items():
+                      pos_tag = word2pos.get(w, ["UNKNOWN"])[0] 
+                      pos_grouped[pos_tag].append((w, ranked_fillers))
 
-      if output_format == 'txt' and output_file:
-          with open(output_file, 'w') as file:
-              model_details = f"\"fill-mask\", model=\"{model_name}\""
-              file.write(f"\n{model_details}\n")
-              for entry in new_dataset_1:
-
-                  id = entry['id']
-                  premise = entry['premise']
-                  hypothesis = entry['hypothesis']
-                  label = entry['label']
-
+               
                   file.write(f"\n{id}: {label}\n{premise}\n{hypothesis}\n")
-                  for w, ranked_fillers in entry['new_h_p'].items():
-                      file.write(f"{ranked_fillers['premise']}\n{ranked_fillers['hypothesis']}\n")
-          return new_list4, new_list3
+                  
+                  for pos_tag in sorted(pos_grouped.keys()):
+                     
+                      file.write(f"\n--- {pos_tag.upper()} ---\n")
+                    
+                      for w, ranked_fillers in pos_grouped[pos_tag]:
+                          p_masked = re.sub(rf'\b{w}\b', f'[{w}]', premise)
+                          h_masked = re.sub(rf'\b{w}\b', f'[{w}]', hypothesis)
+                          file.write(f"\n{p_masked}\n{h_masked}\n")
+
+                          for f, v in ranked_fillers:
+                              file.write(f"{round(v['average_rank']):>2} {f:<20} {v['ranks']} {v['average_prob']}   {v['individual_probs']}\n")
+                else:
+                  for w, ranked_fillers in ranks.items():
+                    p_masked = re.sub(rf'\b{w}\b', f'[{w}]', premise)
+                    h_masked = re.sub(rf'\b{w}\b', f'[{w}]', hypothesis)
+
+                    file.write(f"\n{id}: {label}\n{p_masked}\n{h_masked}\n{word2pos[w]}")
+                    for f, v in ranked_fillers:
+                      file.write(f"{round(v['average_rank']):>2} {f:<20} {v['ranks']} {v['average_prob']}   {v['individual_probs']}\n")
+        
+      if output_format == 'txt' and output_file:
+        with open(output_file, 'w') as file:
+            model_details = f"\"fill-mask\", model=\"{model_name}\""
+            file.write(f"\n{model_details}\n")
+            for entry in new_dataset_1:
+
+                id, premise, hypothesis, label = entry['id'], entry['premise'], entry['hypothesis'], entry['label']
+                
+                file.write(f"\n{id}: {label}\n{premise}\n{hypothesis}\n")
+                for w, ranked_fillers in entry['new_h_p'].items():
+                    file.write(f"{ranked_fillers['premise']}\n{ranked_fillers['hypothesis']}\n")
+        return new_list4, new_list3
 
       return new_list4, new_list3
