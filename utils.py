@@ -181,26 +181,28 @@ def flatten_extracted_words(extracted):
         return set()
   return set()
 
-def filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process):
+def filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process, max_filtered_count=None):
 
-    filtered = {
-        k: p
-        for k, p in list(dataset.items())[:num_sentences_to_process]
-        if len(p['lcnt']) == 1  # one label
-        and len(p['p'].split()) >= 8  # premise len >= 8
-        and len(p['h'].split()) >= 8
-        and (len
+    filtered = {}
+    count = 0 
 
-                (flatten_extracted_words(
-                    extract_nouns_and_verbs(S2A[p['p']]['pos'], S2A[p['p']]['tok'], pos_to_mask)
-                ) &
-                flatten_extracted_words(
-                    extract_nouns_and_verbs(S2A[p['h']]['pos'], S2A[p['h']]['tok'], pos_to_mask)
-                )
-            ) >= min_common_words)
-    }
+    for k, p in list(dataset.items())[:num_sentences_to_process]:
+        if len(p['lcnt']) == 1 and len(p['p'].split()) >= 8 and len(p['h'].split()) >= 8:
+            common_words = (
+                flatten_extracted_words(extract_nouns_and_verbs(S2A[p['p']]['pos'], S2A[p['p']]['tok'], pos_to_mask))
+                &
+                flatten_extracted_words(extract_nouns_and_verbs(S2A[p['h']]['pos'], S2A[p['h']]['tok'], pos_to_mask))
+            )
+
+            if len(common_words) >= min_common_words:
+                filtered[k] = p
+                count += 1
+
+                if max_filtered_count and count >= max_filtered_count:
+                    break
 
     return filtered
+
 
 def process_unmasked_dataset(filtered_list_1, id) -> List[Dict]:
   new_list4 = []
@@ -236,6 +238,7 @@ def process_unmasked_dataset(filtered_list_1, id) -> List[Dict]:
 
   return new_list4
     
+
 def create_filler_masked_dataset(
     model_name: str,
     dataset: pd.DataFrame,
@@ -245,7 +248,8 @@ def create_filler_masked_dataset(
     num_filler_suggestions: int,
     rank_w:int,
     to_mask: str,
-    num_sentences_to_process: int = None,
+    num_sentences_to_process_dataset: int = None,
+    num_sentences_compliant_criteria: int = None,
     output_format: str = 'list',
     output_file: str = None,
     output_file_2: str= None,
@@ -264,7 +268,8 @@ def create_filler_masked_dataset(
         rank_w : slice or int // the ranking range/ the specific filler suggestions that will be part of the new dataset
         to_mask : str // Whether to return a dataset with inflated options or not, if 'no' > output are 2 datasets, unmasked sentences that have the no. min of common pos tags indicated, with (second returned dictionary) and with no ids
                       // if 'yes' > returns 2 datasets, first dataset containts the new obtained dataset after inlafting with masked suggestions, second dictionaries stores the initial filtered dataset for masking, before masking.
-        num_sentences_to_process : int /// The number of sentences to process from the dataset.
+        num_sentences_to_process_dataset : int /// The number of sentences to process from the dataset.
+        num_sentences_compliant_criteria : int // argument that sopecifies after how many sentences compliant to the crteria to select
         output_format : str // The format of the output file
         output_file : str /// file name where the masked dataset  will be saved
         output_file_2 : str // name of a second output file that will store all the ranked words of first 100 examples of the dataset
@@ -279,7 +284,7 @@ def create_filler_masked_dataset(
 
 
     dataset = dataset[split]
-    SNLI_filtered_2 = filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process)
+    SNLI_filtered_2 = filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process_dataset, num_sentences_compliant_criteria)
 
     grouped_problems = defaultdict(dict)
     for k, p in SNLI_filtered_2.items():
