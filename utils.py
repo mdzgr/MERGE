@@ -184,9 +184,11 @@ def flatten_extracted_words(extracted):
 def filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process, max_filtered_count=None):
 
     filtered = {}
-    count = 0 
+    count = 0  
 
-    for k, p in list(dataset.items())[:num_sentences_to_process]:
+    dataset_items = list(dataset.items())[:num_sentences_to_process] if num_sentences_to_process else dataset.items()
+
+    for k, p in dataset_items:
         if len(p['lcnt']) == 1 and len(p['p'].split()) >= 8 and len(p['h'].split()) >= 8:
             common_words = (
                 flatten_extracted_words(extract_nouns_and_verbs(S2A[p['p']]['pos'], S2A[p['p']]['tok'], pos_to_mask))
