@@ -483,7 +483,7 @@ def process_dataset(first_data, second_data, ranked_overlap, neutral_number, ent
                     for i in range(*rank_option.indices(len(ranked_fillers))):
                         best_ = ranked_fillers[i][0].strip()
                         p_variant = re.sub(rf'\b{w}\b', best_, premise)
-                        print('p_variant',p_variant)
+                       
                         h_variant = re.sub(rf'\b{w}\b', best_, hypothesis)
                         sentence_variants.append((p_variant, h_variant))
 
