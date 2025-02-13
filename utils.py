@@ -10,7 +10,7 @@ from collections import defaultdict
 
 
 #do not replace negation in adverb
-def extract_nouns(pos_tags, tokens, source, pos_type):
+def extract__pos_position(pos_tags, tokens, source, pos_type):
     noun_tags = {'NN', 'NNS'}
     verb_tags = {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'}
     adjective_tags = {'JJ', 'JJR', 'JJS'}
@@ -56,6 +56,7 @@ def extract_nouns(pos_tags, tokens, source, pos_type):
             category = None
 
         if category:
+
             if token not in dictionary_positions:
                 dictionary_positions[token] = {'positions': [offset], 'pos': pos, 'source': source}
             else:
@@ -67,44 +68,76 @@ def extract_nouns(pos_tags, tokens, source, pos_type):
             current_position += len(token)
         if token in special_tok:
             current_position += len(token) - 3
-    # print(dictionary_positions)
     return dictionary_positions
 
+
+def common(sentence1, sentence2, pos_sent_1, pos_sent_2, toks_sent_1, toks_sent_2, pos_type, source_1, source_2, singles='yes'):
+
+    extracted_1 = extract__pos_position(pos_sent_1, toks_sent_1, source_1, pos_type)
+
+    extracted_2 = extract__pos_position(pos_sent_2, toks_sent_2, source_2, pos_type)
+    common_tokens = set(extracted_1.keys()) & set(extracted_2.keys())
+    common_dict = {token: extracted_1[token] for token in common_tokens}
+    all_nouns_singles = {' ' + k for d in [extracted_1, extracted_2] for k, v in d.items()} if singles=='yes' else None
+    mask_positions_1 = [extracted_1[token]["positions"][0] for token in common_tokens]
+    mask_positions_2 = [extracted_2[token]["positions"][0] for token in common_tokens]
+
+    return common_dict, mask_positions_1, mask_positions_2, all_nouns_singles
+
+
 def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
-                         model_fill_mask, all_single_words, suggestion_n=50, type_mask=None) -> Dict[Tuple[int,int], List[str]]:
+                         model_fill_mask, all_single_words, common_tokens, suggestion_n=50) -> Dict[Tuple[int,int], List[str]]:
     """ mask_offsets is a list of integer pairs that mark the part of teh string input taht needs to be masked.
         It is a list because in general it might be needed to mask several parts of the input string.
         Returns a dictionary with character offsets as keys and a list of ranked suggestions as values.
     """
+    model_architecture = model_fill_mask.model.config.architectures[0].lower()
+
+    if 'bert' in model_architecture and 'roberta' not in model_architecture:
+      mask_token = '[MASK]'
+    else:
+      mask_token = '<mask>'
     suggestions = {}
-    suggestions_replaced={}
-    if type_mask == 'one':
-      mask_token = '[MASK]' if 'bert' in model_fill_mask.model.config.architectures[0].lower() else ' <mask>'
-      for i,j in mask_offsets:
-        tokens={}
-        tokens_repl={}
-        masked_input = input_str[:i] +  f' {mask_token}' + input_str[j:] #for roberta is dif token <mask>
-        if masked_input.endswith('<mask>'):
-          masked_input+='.'
 
-        generated = model_fill_mask(masked_input, top_k=suggestion_n)
-        all_singles_stripped=[i.strip(' ') for i in all_single_words]
-        all_singles_stripped_lower=[i.strip(' ').lower() for i in all_single_words]
-        all_singles_lower=[i.lower() for i in all_single_words]
-        for k in generated:
+    for i, j in mask_offsets:
+      masked_token_orig = input_str[i:j]
+      offset_key = str(i)+':'+str(j)
+      if masked_token_orig in common_tokens:
+          pos_tag = common_tokens[masked_token_orig].get('pos', 'UNK')
+      else:
+          pos_tag = "UNK"
+      token_key = f"{masked_token_orig}:{pos_tag}"
+      candidate_list = []
+      masked_input = input_str[:i] + f'{mask_token}' + input_str[j:]
 
-          if k['token_str'] in all_single_words or k['token_str'] in all_singles_stripped or k['token_str'] in all_singles_stripped_lower or k['token_str'] in all_singles_lower:
+      if masked_input.endswith('<mask>'):
+          masked_input += '.'
+      generated = model_fill_mask(masked_input, top_k=suggestion_n)
+      all_singles_stripped = [i.strip(' ') for i in all_single_words]
+      all_singles_stripped_lower = [i.strip(' ').lower() for i in all_single_words]
+      all_singles_lower = [i.lower() for i in all_single_words]
+      for k in generated:
+          if k['token_str'] in all_single_words or k['token_str'] in all_singles_stripped or k[
+              'token_str'] in all_singles_stripped_lower or k['token_str'] in all_singles_lower:
 
-            continue
+              continue
+          
+          if re.match(r' \w+', k['token_str']) or re.match(r'\w+', k['token_str']) and not k[
+              'token_str'].startswith('##'):
+              candidate_list.append(f"{k['token_str']}:{k['score']:.2e}")
 
-          if re.match(r' \w+',  k['token_str']) or re.match(r'\w+',  k['token_str']) and not k['token_str'].startswith('##'):
-
-            tokens[k['token_str']]={'score': k['score'], 'sequence': k['sequence']}
-
-        suggestions[(i, j)] = tokens
-
+      if input_str not in suggestions:
+          suggestions[token_key] = {}
+      if offset_key not in suggestions[token_key]:
+        suggestions[token_key][offset_key] = candidate_list
+      else:
+        suggestions[token_key][offset_key].extend(candidate_list)
     return suggestions
-                             
+
+
+
+
+
 def ranked_overlap(list_of_lists, probs):
 
     n = len(list_of_lists)
@@ -170,10 +203,10 @@ def extract_nouns_and_verbs(pos_tags, tokens, pos_type):
 
         else:
             raise ValueError("Invalid pos_type. Choose 'noun', 'verb', 'adjective', 'adverb', 'merged_n_a', 'merged_v_n', 'merged_v_a', or ' 'merged_v_a_n''.")
-            
+
 def flatten_extracted_words(extracted):
   if isinstance(extracted, set):
-      return extracted  
+      return extracted
   elif isinstance(extracted, dict):
     if all(extracted.values()):
       return set().union(*extracted.values())  #
@@ -181,19 +214,19 @@ def flatten_extracted_words(extracted):
         return set()
   return set()
 
-def filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process, max_filtered_count=None):
+def filter_snli(dataset, mapping, pos_to_mask, min_common_words, num_sentences_to_process, max_filtered_count=None):
 
     filtered = {}
-    count = 0  
+    count = 0
 
     dataset_items = list(dataset.items())[:num_sentences_to_process] if num_sentences_to_process else dataset.items()
 
     for k, p in dataset_items:
         if len(p['lcnt']) == 1 and len(p['p'].split()) >= 8 and len(p['h'].split()) >= 8:
             common_words = (
-                flatten_extracted_words(extract_nouns_and_verbs(S2A[p['p']]['pos'], S2A[p['p']]['tok'], pos_to_mask))
+                flatten_extracted_words(extract_nouns_and_verbs(mapping[p['p']]['pos'], mapping[p['p']]['tok'], pos_to_mask))
                 &
-                flatten_extracted_words(extract_nouns_and_verbs(S2A[p['h']]['pos'], S2A[p['h']]['tok'], pos_to_mask))
+                flatten_extracted_words(extract_nouns_and_verbs(mapping[p['h']]['pos'], mapping[p['h']]['tok'], pos_to_mask))
             )
 
             if len(common_words) >= min_common_words:
@@ -206,9 +239,9 @@ def filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process
     return filtered
 
 
-def process_unmasked_dataset(filtered_list_1, id) -> List[Dict]:
+def process_unmasked_dataset(filtered_list_1, neutral_number:int, entailment_number:int, contradiction_number:int, id) -> List[Dict]:
   new_list4 = []
-  
+
   label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
 
   if isinstance(filtered_list_1, dict):
@@ -218,44 +251,79 @@ def process_unmasked_dataset(filtered_list_1, id) -> List[Dict]:
         ]
 
   for i in tqdm(filtered_list_1):
-      # print(i)
+
       label = i['label']
       if id=='yes':
         new_list4.append({
             'id':i['id'],
             'premise': i['premise'],
             'hypothesis': i['hypothesis'],
-            'label': {'contradiction': 2, 'entailment': 0, 'neutral': 1}[label]
+            'label': {'neutral': neutral_number, 'entailment': entailment_number, 'contradiction':contradiction_number}[label]
         })
         label_counts[label] += 1
       if id =='no':
         new_list4.append({
             'premise': i['premise'],
             'hypothesis': i['hypothesis'],
-            'label': {'contradiction': 2, 'entailment': 0, 'neutral': 1}[label]
+            'label': {'neutral': neutral_number, 'entailment': entailment_number, 'contradiction':contradiction_number}[label]
         })
         label_counts[label] += 1
 
   print("Label counts:", label_counts)
 
   return new_list4
-    
 
-def create_filler_masked_dataset(
+def pos_toks_extract_from_dataset(list_filtered, mapping):
+      filtered_list_1 = []
+      grouped_problems = defaultdict(dict)
+      for k, p in list_filtered.items():
+          base_id = k[:-1]
+          version = k[-1]
+          grouped_problems[base_id][version] = p
+
+      for base_id, versions in grouped_problems.items():
+          for version, p in versions.items():
+            filtered_list_1.append({
+                'id': f"{base_id}{version}",
+                'label': p['g'],
+                'premise': p['p'],
+                'hypothesis': p['h'],
+                'p_p': mapping[p['p']]['pos'],
+                'p_t': mapping[p['p']]['tok'],
+                'h_p': mapping[p['h']]['pos'],
+                'h_t': mapping[p['h']]['tok']
+            })
+      print(f"no. problems filtered after criteria: {len(filtered_list_1)}")
+      return filtered_list_1
+
+def is_sentence_fully_processed(sentence, filler_data, common_tokens_dictionary):
+  if sentence not in filler_data:
+      return False
+
+  existing_keys = set(filler_data[sentence].keys())
+
+  required_keys = {f"{token}:{data['pos']}" for token, data in common_tokens_dictionary.items()}
+
+  return required_keys.issubset(existing_keys)
+
+
+def create_filler_file(
     model_name: str,
     dataset: pd.DataFrame,
     split: str,
     pos_to_mask: str,
     min_common_words: int,
     num_filler_suggestions: int,
-    rank_w:int,
-    to_mask: str,
+    source_1: str,
+    source_2: str,
+    mapping,
+    already_exsiting_words: str,
+    no_neutral:int,
+    no_contradiction:int,
+    no_ential:int,
     num_sentences_to_process_dataset: int = None,
     num_sentences_compliant_criteria: int = None,
-    output_format: str = 'list',
     output_file: str = None,
-    output_file_2: str= None,
-    separate_by_pos: str = 'no'
 ) -> List[Dict]:
 
     """
@@ -267,256 +335,199 @@ def create_filler_masked_dataset(
         pos_to_mask : str // a str indicating what pos to be masked in sentences ('noun' or 'verb'), and what sentences to be picked for masking considering trhe min_common_words (e.g. 3 common nouns)
         min_common_words : int// the minimum number of common words required between premise and hypothesis
         num_filler_suggestions : int// The number of suggested filler words for each masked token by model
-        rank_w : slice or int // the ranking range/ the specific filler suggestions that will be part of the new dataset
-        to_mask : str // Whether to return a dataset with inflated options or not, if 'no' > output are 2 datasets, unmasked sentences that have the no. min of common pos tags indicated, with (second returned dictionary) and with no ids
-                      // if 'yes' > returns 2 datasets, first dataset containts the new obtained dataset after inlafting with masked suggestions, second dictionaries stores the initial filtered dataset for masking, before masking.
+        source_1: name of the first sentence in dataset
+        source_2: name of the second sentence in dataset
+        mapping: mapping function
+        already_exsiting_words: if we want to exclude or not 3xclude alreadye xisting words
         num_sentences_to_process_dataset : int /// The number of sentences to process from the dataset.
         num_sentences_compliant_criteria : int // argument that sopecifies after how many sentences compliant to the crteria to select
         output_format : str // The format of the output file
-        output_file : str /// file name where the masked dataset  will be saved
-        output_file_2 : str // name of a second output file that will store all the ranked words of first 100 examples of the dataset
-        separate_by_pos : str // If 'yes', returnes a masked dictionary and output_file_2 grouped by pos tags
-
+        output_file : str /// file name where the masked dataset will be saved
+        #returns the list of processed sentences with ids and a sepearte file with the suggestions
     """
 
     label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
     new_list4 = []
-    new_list_3=[]
-    filtered_list_1 = []
-
 
     dataset = dataset[split]
-    SNLI_filtered_2 = filter_snli(dataset, pos_to_mask, min_common_words, num_sentences_to_process_dataset, num_sentences_compliant_criteria)
+    SNLI_filtered_2 = filter_snli(dataset, mapping, pos_to_mask, min_common_words,
+                                  num_sentences_to_process_dataset, num_sentences_compliant_criteria)
 
-    grouped_problems = defaultdict(dict)
-    for k, p in SNLI_filtered_2.items():
-        base_id = k[:-1]
-        version = k[-1]
-        grouped_problems[base_id][version] = p
+    filtered_list_1 = pos_toks_extract_from_dataset(SNLI_filtered_2, mapping)
+    new_list3 = process_unmasked_dataset(filtered_list_1, no_neutral, no_ential, no_contradiction, id='yes')
 
-    for base_id, versions in grouped_problems.items():
-        for version, p in versions.items():
-          filtered_list_1.append({
-              'id': f"{base_id}{version}",
-              'label': p['g'],
-              'premise': p['p'],
-              'hypothesis': p['h'],
-              'p_p': S2A[p['p']]['pos'],
-              'p_t': S2A[p['p']]['tok'],
-              'h_p': S2A[p['h']]['pos'],
-              'h_t': S2A[p['h']]['tok']
-          })
-    print(f"no. problems filtered after criteria: {len(filtered_list_1)}")
-    if to_mask=='no':
-      new_list4 = process_unmasked_dataset(filtered_list_1, id='no')
-      new_list_3 = process_unmasked_dataset(filtered_list_1, id='yes')
-      if output_format == 'txt' and output_file:
-          with open(output_file, 'w') as file:
-              model_details = f"\"fill-mask\", model=\"{model_name}\""
-              file.write(f"\n{model_details}\n")
-              for entry in filtered_list_1:
-
-                  id = entry['id']
-                  premise = entry['premise']
-                  hypothesis = entry['hypothesis']
-                  label = entry['label']
-
-                  file.write(f"\n{id}: {label}\n{premise}\n{hypothesis}\n")
-
-          return new_list4, new_list_3
-      return new_list4, new_list_3
-    else:
-      new_list3 = process_unmasked_dataset(filtered_list_1, id='yes')
-      filler_pipeline = pipeline("fill-mask", model=model_name)
-      words_overall2 = []
-      for p in tqdm(filtered_list_1):
-          id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h = (p['id'], p['premise'], p['hypothesis'], p['p_t'], p['p_p'], p['h_t'], p['h_p'])
-
-          p_dictionary = extract_nouns(pos_p, tok_p, 'premise', pos_to_mask)
-          h_dictionary = extract_nouns(pos_h, tok_h, 'hypothesis', pos_to_mask)
-
-          all_nouns_singles = {' ' + k for d in [p_dictionary, h_dictionary] for k, v in d.items()}
-
-          common_tokens_dictionary = set(p_dictionary.keys()).intersection(h_dictionary.keys())
-
-          p_dictionary = {k: v for k, v in p_dictionary.items() if k in common_tokens_dictionary}
-          h_dictionary = {k: v for k, v in h_dictionary.items() if k in common_tokens_dictionary}
-
-          p_off = [i['positions'][0] for i in p_dictionary.values()]
-          h_off = [i['positions'][0] for i in h_dictionary.values()]
-
-          p_off_filler = {offset: suggest_mask_fillers(premise, [offset], filler_pipeline, all_nouns_singles, num_filler_suggestions, 'one')[offset]
-                          for offset in p_off}
-
-          h_off_filler = {offset: suggest_mask_fillers(hypothesis, [offset], filler_pipeline, all_nouns_singles, num_filler_suggestions, 'one')[offset]
-                          for offset in h_off}
-
-          combined_p_h = defaultdict(list)
-          for d in (p_dictionary, h_dictionary):
-              for key, value in d.items():
-                  combined_p_h[key].append(value)
-
-          word2fillers = defaultdict(list)
-          word2probabilities = defaultdict(list)
-          word2pos=defaultdict(list)
-          for key, value in combined_p_h.items():
-
-              for i in value:
-                  positions = i['positions'][0]
-                  source = i['source']
-                  pos=i['pos']
-
-                  if source == 'premise' and positions in p_off_filler:
-                      fillers = p_off_filler[positions]
-                      word2fillers[key].append(list(fillers.keys()))
-                      word2probabilities[key].append([val['score'] for val in fillers.values() if 'score' in val])
-                      word2pos[key].append(pos)
-
-                  if source == 'hypothesis' and positions in h_off_filler:
-                      fillers = h_off_filler[positions]
-                      word2fillers[key].append(list(fillers.keys()))
-                      word2probabilities[key].append([val['score'] for val in fillers.values() if 'score' in val])
-                      word2pos[key].append(pos)
-          
-
-          words = {}
-          for w in word2fillers:
-
-              words[w] = ranked_overlap(word2fillers[w], word2probabilities[w]).items()
-              words[w] = sorted(words[w], key=lambda x: x[1]["average_rank"])
-
-          words_overall2.append({
-              'id': id,
-              'premise': premise,
-              'label': p['label'],
-              'hypothesis': hypothesis,
-              'ranks': words,
-              'pos': word2pos
-
-          })
+    filler_pipeline = pipeline("fill-mask", model=model_name)
 
 
-      new_dataset_1 = []
-      for entry in words_overall2:
-   
-          id, label, premise, hypothesis, ranks, pos_en = entry['id'], entry['label'], entry['premise'], entry['hypothesis'], entry['ranks'], entry['pos']
+    results_dict = {}
+    
+    for p in tqdm(filtered_list_1):
+        id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h = (p['id'], p['premise'], p['hypothesis'], p['p_t'], p['p_p'], p['h_t'], p['h_p'] )
 
-          new_ = {}
+        common_tokens_dictionary, p_off, h_off, all_nouns_singles = common(
+            premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2, already_exsiting_words
+        )
 
-          for w, ranked_fillers in ranks.items():
-            try:
-              if isinstance(rank_w, int):
-                  best_ = ranked_fillers[rank_w][0].strip()
-                  p_masked = re.sub(rf'\b{w}\b', best_, premise)
-                  h_masked = re.sub(rf'\b{w}\b', best_, hypothesis)
 
-                  pos_1= pos_en[w]
+      
+        p_off_filler = suggest_mask_fillers(premise, p_off, filler_pipeline, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
+        if p_off_filler:
+       
+          if premise in results_dict:
+              results_dict[premise].update(p_off_filler)
+          else:
+              results_dict[premise] = p_off_filler
 
-                  new_[w] = {'premise': p_masked, 'hypothesis': h_masked, 'pos': pos_1}
+        h_off_filler = suggest_mask_fillers(hypothesis, h_off, filler_pipeline, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
+        if h_off_filler:
+          if hypothesis in results_dict:
+              results_dict[hypothesis].update(h_off_filler)
+          else:
+              results_dict[hypothesis] = h_off_filler      
+    with open(output_file, "w") as f:
+        json.dump(results_dict, f)
 
-              elif isinstance(rank_w, slice):
+    return new_list3
+import re
+from collections import defaultdict
+from tqdm import tqdm
 
-                  for i in range(*rank_w.indices(len(ranked_fillers))):
-                   
-                      best_ = ranked_fillers[i][0].strip()
-                      p_masked = re.sub(rf'\b{w}\b', best_, premise)
-                      h_masked = re.sub(rf'\b{w}\b', best_, hypothesis)
-                    
-                      pos_1 = pos_en[w]
-                    
-                      new_[f"{w}_{i}"] = {'premise': p_masked, 'hypothesis': h_masked, 'pos': pos_1}
+def process_dataset(first_data, second_data, ranked_overlap, neutral_number, entailment_number, contradiction_number, rank_option='top', sort_by_pos='no', id='no'):
+    """
+    Matches premise and hypothesis from second_data with first_data, replaces words, applies ranking,
+    transforms the dataset, and optionally groups it by POS tags.
 
-              else:
-                  raise ValueError("rank_w must be an integer or a slice.")
-            except IndexError:
-              break
-          new_dataset_1.append({'id': id, 'premise': premise, 'label': label, 'hypothesis': hypothesis, 'new_h_p': new_})
-      new_list4_dict = defaultdict(list) 
-      for i in tqdm(new_dataset_1):
-          label = i['label']
-          pos_tagged_dataset = defaultdict(list)
+    :param first_data: The dataset containing suggestions
+    :param second_data: The dataset containing 'id', 'premise', 'hypothesis', and 'label'.
+    :param ranked_overlap: The function that ranks words based on probability.
+    :param neutral_number: number for neutral label
+    :param entailment_number: number for entailment label
+    :param contradiction_number: number for contradiction label
+    :param rank_option: 'top' for highest-ranked, int for specific rank, slice for multiple replacements.
+    :param sort_by_pos: 'yes' to group the dataset by POS tags.
+    :param id: 'yes' to process a first_data file with masked suggestions that were recorded as sentence:id 
+    :return: Processed dataset with replaced words and transformed labels.
+    """
 
-          for key, value in i['new_h_p'].items():
-              if isinstance(value, dict) and 'premise' in value and 'hypothesis' in value:
-                  if separate_by_pos == 'yes':
-                     
-                      pos_tagged_dataset[value['pos'][0]].append({
-                          'premise': value['premise'],
-                          'hypothesis': value['hypothesis'],
-                          'label': {'contradiction': 0, 'entailment': 1, 'neutral': 2}[label],
-                      })
+    processed_data = []
+    pos_tagged_data = defaultdict(list)  
+    label_counts = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
+    for entry in tqdm(second_data[:20]):
+        id = entry['id']
+        premise = entry['premise']
+        hypothesis = entry['hypothesis']
+        label = entry['label']
 
-                  else:
-                      new_list4.append({
-                          'premise': value['premise'],
-                          'hypothesis': value['hypothesis'],
-                          'label': {'contradiction': 0, 'entailment': 1, 'neutral': 2}[label]
-                      })
-          label_counts[label] += len(i['new_h_p'])
+        if id =='yes':
+          premise_id = f"{premise}:{id}"
+          hypothesis_id = f"{hypothesis}:{id}"
+
+        else:
+          premise_id = premise
+          hypothesis_id = hypothesis
+
   
-          if separate_by_pos == 'yes':
-            for pos, entries in pos_tagged_dataset.items():
+        word2fillers = defaultdict(list)
+        word2probabilities = defaultdict(list)
+        word2pos = defaultdict(list)
+     
+        
+        for sentence_id in [premise_id, hypothesis_id]:
+          for i in first_data:
+            if sentence_id in i.keys():
+                
+                token_data = i[sentence_id]
+                
+                for token_key, offsets in token_data.items():
+                    for offset, candidates in offsets.items():
+                        word, pos = token_key.split(":")  
+                        
+                       
+                        fillers = [c.split(":")[0] for c in candidates]
+                  
+                        probabilities = [float(c.split(":")[1]) for c in candidates]
 
-                new_list4_dict[pos].extend(entries)
-            
-      if separate_by_pos == 'yes':
-        for i, v in new_list4_dict.items():
-          new_list4.append({i:v})
+                        word2fillers[word].append(fillers)
+                        word2probabilities[word].append(probabilities)
+                        word2pos[word].append(pos)  
 
 
-      print("Label counts of generated inflated problems:", label_counts)
+        words = {}
 
-      if output_format == 'txt' and output_file_2:
-          with open(output_file_2, 'w') as file:
-              model_details = f"\"fill-mask\", model=\"{model_name}\""
-              file.write(f"\n{model_details}\n")
-              pos_grouped = defaultdict(list)
-              if separate_by_pos == 'yes':
-                for entry in words_overall2[:100]:
-                  ranks, pos_t=entry['ranks'], entry['pos']
+        for w in word2fillers:
+            words[w] = ranked_overlap(word2fillers[w], word2probabilities[w]).items()
+            words[w] = sorted(words[w], key=lambda x: x[1]["average_rank"])
 
-              
-                  for w, ranked_fillers in ranks.items():
-                      pos_tag = pos_t.get(w, ["UNKNOWN"])[0]
-                      pos_grouped[pos_tag].append((entry))
+   
+        assigned_pos_tags = set()  
+        sentence_variants = []
+           
+        for w, ranked_fillers in words.items():
+        
+            try:
+                if isinstance(rank_option, int):
+                   
+                    if len(ranked_fillers)<rank_option-1:
+                      continue
+                    else:
+                      best_ = ranked_fillers[rank_option][0].strip()
+                      
+                      p_variant = re.sub(rf'\b{w}\b', best_, premise)
+                     
+                      h_variant = re.sub(rf'\b{w}\b', best_, hypothesis)
+                      sentence_variants.append((p_variant, h_variant))
+                    
+                elif isinstance(rank_option, slice):
+                 
+                    for i in range(*rank_option.indices(len(ranked_fillers))):
+                        best_ = ranked_fillers[i][0].strip()
+                        p_variant = re.sub(rf'\b{w}\b', best_, premise)
+                        print('p_variant',p_variant)
+                        h_variant = re.sub(rf'\b{w}\b', best_, hypothesis)
+                        sentence_variants.append((p_variant, h_variant))
 
                
-                for i, v in pos_grouped.items():
-                  file.write(f"\n--- {i.upper()} ---\n")
-                 
-                  for y in v:
-                    id, premise, hypothesis, label, ranks, pos = y['id'], y['premise'], y['hypothesis'], y['label'], y['ranks'], y['pos']
-                    file.write(f"\n{id}: {label}\n")
-                    for w, ranked_fillers in ranks.items():
-                        p_masked = re.sub(rf'\b{w}\b', f'[{w}]', premise)
-                        h_masked = re.sub(rf'\b{w}\b', f'[{w}]', hypothesis)
-                        file.write(f"\n{p_masked}\n{h_masked}\n")
+                assigned_pos_tags.update(word2pos[w])
+                for idx, (p_variant, h_variant) in enumerate(sentence_variants):
 
-                        for f, v in ranked_fillers:
-                            file.write(f"{round(v['average_rank']):>2} {f:<20} {v['ranks']} {v['average_prob']}   {v['individual_probs']}\n")
-              else:
-                for entry in words_overall2[:100]:
-                  id, premise, hypothesis, label, ranks = entry['id'], entry['premise'], entry['hypothesis'], entry['label'], entry['ranks']
-                  for w, ranked_fillers in ranks.items():
-                    p_masked = re.sub(rf'\b{w}\b', f'[{w}]', premise)
-                    h_masked = re.sub(rf'\b{w}\b', f'[{w}]', hypothesis)
+                  processed_entry = {
+                      'premise': p_variant,
+                      'hypothesis': h_variant,
+                      'label': label
+                  }
 
-                    file.write(f"\n{id}: {label}\n{p_masked}\n{h_masked}\n")
-                    for f, v in ranked_fillers:
+                  if id == 'yes':
+                      processed_entry['id'] = f"{id}_{idx}"
 
-                      file.write(f"{round(v['average_rank']):>2} {f:<20} {v['ranks']} {v['average_prob']}   {v['individual_probs']}\n")
+               
+                  if label == neutral_number:
+                      label_counts['neutral'] += 1
+                  elif label == entailment_number:
+                      label_counts['entailment'] += 1
+                  elif label == contradiction_number:
+                      label_counts['contradiction'] += 1
 
-      if output_format == 'txt' and output_file:
-        with open(output_file, 'w') as file:
-            model_details = f"\"fill-mask\", model=\"{model_name}\""
-            file.write(f"\n{model_details}\n")
-            for entry in new_dataset_1:
 
-                id, premise, hypothesis, label = entry['id'], entry['premise'], entry['hypothesis'], entry['label']
+                  if sort_by_pos == 'yes':
+                          for pos_tag in assigned_pos_tags:
+                              pos_tagged_data[pos_tag].append(processed_entry)
+                  else:
+                      processed_data.append(processed_entry)
+        
+            except (IndexError, ValueError):
+                continue  
+            
+       
+            
+    print("\nLabel Counts:") 
+    print(f"Neutral: {label_counts['neutral']}")
+    print(f"Entailment: {label_counts['entailment']}")
+    print(f"Contradiction: {label_counts['contradiction']}\n")
 
-                file.write(f"\n{id}: {label}\n{premise}\n{hypothesis}\n")
-                for w, ranked_fillers in entry['new_h_p'].items():
-                    file.write(f"{ranked_fillers['premise']}\n{ranked_fillers['hypothesis']}\n")
-        return new_list4, new_list3
+    if sort_by_pos == 'yes':
+        sorted_data = []
+        for pos, entries in sorted(pos_tagged_data.items()):
+            sorted_data.append({pos: entries})
+        return sorted_data
 
-      return new_list4, new_list3
+    return processed_data
