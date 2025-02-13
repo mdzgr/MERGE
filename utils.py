@@ -110,7 +110,7 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
       token_key = f"{masked_token_orig}:{pos_tag}"
       candidate_list = []
       masked_input = input_str[:i] + f'{mask_token}' + input_str[j:]
-      print(masked_input)
+      # print(masked_input)
       if masked_input.endswith('<mask>'):
           masked_input += '.'
       generated = model_fill_mask(masked_input, top_k=suggestion_n)
