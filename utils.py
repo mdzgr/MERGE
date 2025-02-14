@@ -11,79 +11,46 @@ from collections import defaultdict
 
 
 #do not replace negation in adverb
-def extract__pos_position(pos_tags, tokens, source, pos_type):
-    noun_tags = {'NN', 'NNS'}
-    verb_tags = {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'}
-    adjective_tags = {'JJ', 'JJR', 'JJS'}
-    adverb_tags = {'RB', 'RBR', 'RBS'}
+def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
+    pos_tag_map = {
+        'noun': {'NN', 'NNS'},
+        'verb': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'},
+        'adjective': {'JJ', 'JJR', 'JJS'},
+        'adverb': {'RB', 'RBR', 'RBS'},
+        'merged_n_a': {'NN', 'NNS', 'JJ', 'JJR', 'JJS'},
+        'merged_v_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'NN', 'NNS'},
+        'merged_v_a': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'RBR', 'RBS'},
+        'merged_v_a_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'RBR', 'RBS', 'NN', 'NNS'}
+    }
 
-    tags = [
-        ".", ",", "?", "'", ":", ";", "-", "–", "—", "'", "\"", "(", ")", "[", "]", "{", "}",
-        "/", "\\", "|", "@", "#", "$", "%", "^", "&", "*", "_", "~", "`", "<", ">", "="
-    ]
-
-    special_tok = ["'s", "'t", "n't"]
+    ignore=["n't", "not", "no", "Never", "neither", "none", "nowise", "nothing", "nobody", "nowhere", "non", "absent", "lacking", "minus", "without", "'s", "'n'", "'re", "'m"]
+    valid_tags = pos_tag_map.get(pos_type, set())
     dictionary_positions = {}
-    current_position = 0
 
     for i, (token, pos) in enumerate(zip(tokens, pos_tags)):
-        start = current_position
-        end = current_position + len(token)
-        offset = (start, end)
+        if pos not in valid_tags:
+            continue
+        if token in ignore:
+            continue
+        pattern = r'\b' + re.escape(token) + r'\b'  # Ensure full word match only
+        matches = list(re.finditer(pattern, sentence))
+        if not matches:
+            continue
 
-
-        if pos_type == 'noun' and pos in noun_tags:
-            category = "nouns"
-        elif pos_type == 'verb' and pos in verb_tags:
-            category = "verbs"
-        elif pos_type == 'adjective' and pos in adjective_tags:
-            category = "adjectives"
-        elif pos_type == 'adverb' and pos in adverb_tags:
-            category = "adverbs"
-        elif pos_type == 'merged_n_a' and (pos in noun_tags or pos in adjective_tags):
-            category = "nouns" if pos in noun_tags else "adjectives"
-        elif pos_type == 'merged_v_n' and (pos in verb_tags or pos in noun_tags):
-            category = "verbs" if pos in verb_tags else "nouns"
-        elif pos_type == 'merged_v_a' and (pos in verb_tags or pos in adverb_tags):
-            category = "verbs" if pos in verb_tags else "adverbs"
-        elif pos_type == 'merged_v_a_n' and (pos in verb_tags or pos in adverb_tags or pos in noun_tags):
-            if pos in verb_tags:
-                category = "verbs"
-            elif pos in adverb_tags:
-                category = "adverbs"
-            else:
-                category = "nouns"
-        else:
-            category = None
-
-        if category:
+        for match in matches:
+            preceding_text = sentence[:match.start()]
+            preceding_length = len(preceding_text)
+       
+            start = preceding_length
+            end = preceding_length + len(token)
+            offset = (start, end)
 
             if token not in dictionary_positions:
-                dictionary_positions[token] = {'positions': [offset], 'pos': pos, 'source': source}
+                dictionary_positions[token] = {'positions': [offset], 'pos': pos, 'source': source, 'preceding_text': preceding_text}
             else:
                 dictionary_positions[token]['positions'].append(offset)
 
-        if pos not in tags:
-            current_position += len(token) + 1
-        if pos in tags:
-            current_position += len(token)
-        if token in special_tok:
-            current_position += len(token) - 3
     return dictionary_positions
-
-
-def common(sentence1, sentence2, pos_sent_1, pos_sent_2, toks_sent_1, toks_sent_2, pos_type, source_1, source_2, singles='yes'):
-
-    extracted_1 = extract__pos_position(pos_sent_1, toks_sent_1, source_1, pos_type)
-
-    extracted_2 = extract__pos_position(pos_sent_2, toks_sent_2, source_2, pos_type)
-    common_tokens = set(extracted_1.keys()) & set(extracted_2.keys())
-    common_dict = {token: extracted_1[token] for token in common_tokens}
-    all_nouns_singles = {' ' + k for d in [extracted_1, extracted_2] for k, v in d.items()} if singles=='yes' else None
-    mask_positions_1 = [extracted_1[token]["positions"][0] for token in common_tokens]
-    mask_positions_2 = [extracted_2[token]["positions"][0] for token in common_tokens]
-
-    return common_dict, mask_positions_1, mask_positions_2, all_nouns_singles
 
 
 def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
@@ -110,7 +77,7 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
       token_key = f"{masked_token_orig}:{pos_tag}"
       candidate_list = []
       masked_input = input_str[:i] + f'{mask_token}' + input_str[j:]
-      # print(masked_input)
+      
       if masked_input.endswith('<mask>'):
           masked_input += '.'
       generated = model_fill_mask(masked_input, top_k=suggestion_n)
@@ -118,6 +85,7 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
       all_singles_stripped_lower = [i.strip(' ').lower() for i in all_single_words]
       all_singles_lower = [i.lower() for i in all_single_words]
       for k in generated:
+
           if k['token_str'] in all_single_words or k['token_str'] in all_singles_stripped or k[
               'token_str'] in all_singles_stripped_lower or k['token_str'] in all_singles_lower:
 
@@ -125,8 +93,10 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
           
           if re.match(r' \w+', k['token_str']) or re.match(r'\w+', k['token_str']) and not k[
               'token_str'].startswith('##'):
-              candidate_list.append(f"{k['token_str']}:{k['score']:.2e}")
+              token = k['token_str'].lstrip()
+              candidate_list.append(f"{token}:{k['score']:.2e}")
 
+      # print(f"Mask offset {offset_key} generated {len(candidate_list)} suggestions.")
       if input_str not in suggestions:
           suggestions[token_key] = {}
       if offset_key not in suggestions[token_key]:
@@ -134,8 +104,6 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
       else:
         suggestions[token_key][offset_key].extend(candidate_list)
     return suggestions
-
-
 
 
 
@@ -307,7 +275,18 @@ def is_sentence_fully_processed(sentence, filler_data, common_tokens_dictionary)
 
   return required_keys.issubset(existing_keys)
 
+def common(sentence1, sentence2, pos_sent_1, pos_sent_2, toks_sent_1, toks_sent_2, pos_type, source_1, source_2, singles='yes'):
 
+    extracted_1 = extract__pos_position(pos_sent_1, toks_sent_1, source_1, pos_type, sentence1)
+
+    extracted_2 = extract__pos_position(pos_sent_2, toks_sent_2, source_2, pos_type, sentence2)
+    common_tokens = set(extracted_1.keys()) & set(extracted_2.keys())
+    common_dict = {token: extracted_1[token] for token in common_tokens}
+    all_nouns_singles = {' ' + k for d in [extracted_1, extracted_2] for k, v in d.items()} if singles=='yes' else None
+    mask_positions_1 = [extracted_1[token]["positions"][0] for token in common_tokens]
+    mask_positions_2 = [extracted_2[token]["positions"][0] for token in common_tokens]
+
+    return common_dict, mask_positions_1, mask_positions_2, all_nouns_singles
 def create_filler_file(
     model_name: str,
     dataset: pd.DataFrame,
@@ -364,7 +343,7 @@ def create_filler_file(
     
     for p in tqdm(filtered_list_1):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h = (p['id'], p['premise'], p['hypothesis'], p['p_t'], p['p_p'], p['h_t'], p['h_p'] )
-
+        
         common_tokens_dictionary, p_off, h_off, all_nouns_singles = common(
             premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2, already_exsiting_words
         )
@@ -373,7 +352,7 @@ def create_filler_file(
       
         p_off_filler = suggest_mask_fillers(premise, p_off, filler_pipeline, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
         if p_off_filler:
-       
+      
           if premise in results_dict:
               results_dict[premise].update(p_off_filler)
           else:
@@ -382,16 +361,13 @@ def create_filler_file(
         h_off_filler = suggest_mask_fillers(hypothesis, h_off, filler_pipeline, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
         if h_off_filler:
           if hypothesis in results_dict:
-              results_dict[hypothesis].update(h_off_filler)
-          else:
-              results_dict[hypothesis] = h_off_filler      
+            results_dict[hypothesis].update(h_off_filler)
+        else:
+          results_dict[hypothesis] = h_off_filler      
     with open(output_file, "w") as f:
         json.dump(results_dict, f)
 
     return new_list3
-import re
-from collections import defaultdict
-from tqdm import tqdm
 
 def process_dataset(first_data, second_data, ranked_overlap, neutral_number, entailment_number, contradiction_number, rank_option='top', sort_by_pos='no', id='no'):
     """
