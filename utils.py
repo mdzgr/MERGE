@@ -15,12 +15,12 @@ def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
     pos_tag_map = {
         'noun': {'NN', 'NNS'},
         'verb': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'},
-        'adjective': {'JJ', 'JJR', 'JJS'},
-        'adverb': {'RB', 'RBR', 'RBS'},
-        'merged_n_a': {'NN', 'NNS', 'JJ', 'JJR', 'JJS'},
+        'adjective': {'JJ'},
+        'adverb': {'RB'},
+        'merged_n_a': {'NN', 'NNS', 'JJ'},
         'merged_v_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'NN', 'NNS'},
-        'merged_v_a': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'RBR', 'RBS'},
-        'merged_v_a_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'RBR', 'RBS', 'NN', 'NNS'}
+        'merged_v_a': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB'},
+        'merged_v_a_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'NN', 'NNS'}
     }
 
     ignore=["n't", "not", "no", "Never", "neither", "none", "nowise", "nothing", "nobody", "nowhere", "non", "absent", "lacking", "minus", "without", "'s", "'n'", "'re", "'m"]
