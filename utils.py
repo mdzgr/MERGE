@@ -23,7 +23,9 @@ def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
         'merged_v_a_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'NN', 'NNS'}
     }
 
-    ignore=["n't", "not", "no", "Never", "neither", "none", "nowise", "nothing", "nobody", "nowhere", "non", "absent", "lacking", "minus", "without", "'s", "'n'", "'re", "'m"]
+
+    #"n't", "not", "no", "Never", "neither", "none", "nowise", "nothing", "nobody", "nowhere", "non", "absent", "lacking", "minus", "without", "'s", "'n'", "'re", "'m"
+    ignore=[]
     valid_tags = pos_tag_map.get(pos_type, set())
     dictionary_positions = {}
 
@@ -208,7 +210,7 @@ def filter_snli(dataset, mapping, pos_to_mask, min_common_words, num_sentences_t
     return filtered
 
 
-def process_unmasked_dataset(filtered_list_1, neutral_number:int, entailment_number:int, contradiction_number:int, id) -> List[Dict]:
+def process_unmasked_dataset(filtered_list_1, neutral_number, entailment_number, contradiction_number, id) -> List[Dict]:
   new_list4 = []
 
   label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
@@ -298,9 +300,9 @@ def create_filler_file(
     source_2: str,
     mapping,
     already_exsiting_words: str,
-    no_neutral:int,
-    no_contradiction:int,
-    no_ential:int,
+    no_neutral,
+    no_contradiction,
+    no_ential,
     num_sentences_to_process_dataset: int = None,
     num_sentences_compliant_criteria: int = None,
     output_file: str = None,
@@ -389,7 +391,7 @@ def process_dataset(first_data, second_data, ranked_overlap, neutral_number, ent
     processed_data = []
     pos_tagged_data = defaultdict(list)  
     label_counts = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
-    for entry in tqdm(second_data[:20]):
+    for entry in tqdm(second_data):
         id = entry['id']
         premise = entry['premise']
         hypothesis = entry['hypothesis']
@@ -468,6 +470,7 @@ def process_dataset(first_data, second_data, ranked_overlap, neutral_number, ent
                 for idx, (p_variant, h_variant) in enumerate(sentence_variants):
 
                   processed_entry = {
+                      'id': id,
                       'premise': p_variant,
                       'hypothesis': h_variant,
                       'label': label
