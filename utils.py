@@ -1,16 +1,29 @@
 #FIXME no explicit punctuaion definition but use the sent and tokens to get chr offsets
-from transformers import pipeline
-from typing import Dict, Callable, List, Tuple
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
+from typing import Dict, Callable, List, Tuple, List, Any
 import nltk
 import re
+import numpy as np
 from nltk import pos_tag, word_tokenize
 from tqdm import tqdm
 import pandas as pd
 import json
-from collections import defaultdict
+from collections import defaultdict, Counter
+import datasets
+from datasets import load_dataset
+import json
+import string
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import pandas_udf
+from typing import Dict,Tuple
+import datasets, evaluate
+from evaluate import evaluator
+from google.colab import files
+import torch
+import torch.nn.functional as F
 
 
-#do not replace negation in adverb
+
 def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
     pos_tag_map = {
         'noun': {'NN', 'NNS'},
@@ -34,7 +47,7 @@ def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
             continue
         if token in ignore:
             continue
-        pattern = r'\b' + re.escape(token) + r'\b'  # Ensure full word match only
+        pattern = r'\b' + re.escape(token) + r'\b'
         matches = list(re.finditer(pattern, sentence))
         if not matches:
             continue
@@ -42,7 +55,7 @@ def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
         for match in matches:
             preceding_text = sentence[:match.start()]
             preceding_length = len(preceding_text)
-       
+
             start = preceding_length
             end = preceding_length + len(token)
             offset = (start, end)
@@ -55,13 +68,68 @@ def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
     return dictionary_positions
 
 
+import torch
+import torch.nn.functional as F
+
+
+
+def generate_mask_predictions(model, tokenizer, context, mask_token, target_word=None, top_k=50):
+    """
+    Generate predictions with detailed token debugging.
+
+    Args:
+        model: The masked language model
+        tokenizer: The corresponding tokenizer
+        context: The input string containing the mask token
+        mask_token: The mask token (e.g., <mask> or [MASK])
+        target_word: The word whose probability we want to retrieve (optional)
+        top_k: The number of predictions to return
+        debug: Whether to print debugging information
+    """
+    if mask_token not in context:
+        raise ValueError(f"Context must contain the mask token: {mask_token}")
+
+    inputs = tokenizer(context, return_tensors="pt")
+    mask_positions = torch.where(inputs.input_ids[0] == tokenizer.mask_token_id)[0]
+
+    if len(mask_positions) == 0:
+        raise ValueError("Mask token not found in the input context.")
+    mask_position = mask_positions.item()
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        predictions = outputs.logits[0, mask_position]
+        probabilities = F.softmax(predictions, dim=-1)
+
+    target_probability = None
+    target_tokens = tokenizer(target_word, add_special_tokens=False)['input_ids']
+    if len(target_tokens) > 1:
+        # print(f"Warning: The word '{target_word}' is split into multiple tokens: {target_tokens}")
+        target_probability='None'
+    else:
+      target_token_id = target_tokens[0]
+      target_probability = probabilities[target_token_id].item()
+
+
+    top_probs, top_indices = torch.topk(probabilities, top_k)
+    prediction_list = []
+    for prob, idx in zip(top_probs, top_indices):
+        token = tokenizer.convert_ids_to_tokens(int(idx))
+        prediction_list.append({
+            "score": prob.item(),
+            "token_str": token
+        })
+
+    return prediction_list, target_probability
+
+
 def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
-                         model_fill_mask, all_single_words, common_tokens, suggestion_n=50) -> Dict[Tuple[int,int], List[str]]:
+                         model, tokenizer, all_single_words, common_tokens, suggestion_n=50) -> Dict[Tuple[int,int], List[str]]:
     """ mask_offsets is a list of integer pairs that mark the part of teh string input taht needs to be masked.
         It is a list because in general it might be needed to mask several parts of the input string.
         Returns a dictionary with character offsets as keys and a list of ranked suggestions as values.
     """
-    model_architecture = model_fill_mask.model.config.architectures[0].lower()
+    model_architecture = model.config.architectures[0].lower()
 
     if 'bert' in model_architecture and 'roberta' not in model_architecture:
       mask_token = '[MASK]'
@@ -76,29 +144,35 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
           pos_tag = common_tokens[masked_token_orig].get('pos', 'UNK')
       else:
           pos_tag = "UNK"
-      token_key = f"{masked_token_orig}:{pos_tag}"
+
       candidate_list = []
       masked_input = input_str[:i] + f'{mask_token}' + input_str[j:]
-      
+
       if masked_input.endswith('<mask>'):
           masked_input += '.'
-      generated = model_fill_mask(masked_input, top_k=suggestion_n)
-      all_singles_stripped = [i.strip(' ') for i in all_single_words]
-      all_singles_stripped_lower = [i.strip(' ').lower() for i in all_single_words]
-      all_singles_lower = [i.lower() for i in all_single_words]
+
+    
+      if mask_token == '<mask>' and not masked_input.startswith('<mask>'):
+        masked_token_orig=' '+masked_token_orig
+        if masked_input.startswith('<mask>'):
+          print('the mask that is fed to the model for probability when it is the first tokem', masked_token_orig)
+      generated, probability_masked_word = generate_mask_predictions(model, tokenizer, masked_input, mask_token, masked_token_orig, suggestion_n)
+
+      if mask_token == '<mask>' and not masked_input.startswith('<mask>'):
+        masked_token_orig=masked_token_orig.strip()
+      if probability_masked_word=='None':
+        token_key = f"{masked_token_orig}:{pos_tag}:{probability_masked_word}"
+      else:
+        token_key = f"{masked_token_orig}:{pos_tag}:{probability_masked_word:.2e}"
       for k in generated:
 
-          if k['token_str'] in all_single_words or k['token_str'] in all_singles_stripped or k[
-              'token_str'] in all_singles_stripped_lower or k['token_str'] in all_singles_lower:
+          token = k['token_str'].lstrip()
+          token_1=token.strip('Ġ')
+          candidate_list.append(f"{token_1}:{k['score']:.2e}")
 
-              continue
-          
-          if re.match(r' \w+', k['token_str']) or re.match(r'\w+', k['token_str']) and not k[
-              'token_str'].startswith('##'):
-              token = k['token_str'].lstrip()
-              candidate_list.append(f"{token}:{k['score']:.2e}")
-
-      # print(f"Mask offset {offset_key} generated {len(candidate_list)} suggestions.")
+      if len(candidate_list) != suggestion_n:
+          print(f"\nWarning: Expected {suggestion_n} suggestions but got {len(candidate_list)}")
+          print(f"Input string: {input_str}")
       if input_str not in suggestions:
           suggestions[token_key] = {}
       if offset_key not in suggestions[token_key]:
@@ -335,43 +409,118 @@ def create_filler_file(
     SNLI_filtered_2 = filter_snli(dataset, mapping, pos_to_mask, min_common_words,
                                   num_sentences_to_process_dataset, num_sentences_compliant_criteria)
 
+
     filtered_list_1 = pos_toks_extract_from_dataset(SNLI_filtered_2, mapping)
     new_list3 = process_unmasked_dataset(filtered_list_1, no_neutral, no_ential, no_contradiction, id='yes')
 
-    filler_pipeline = pipeline("fill-mask", model=model_name)
 
+    model = AutoModelForMaskedLM.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     results_dict = {}
-    
+
     for p in tqdm(filtered_list_1):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h = (p['id'], p['premise'], p['hypothesis'], p['p_t'], p['p_p'], p['h_t'], p['h_p'] )
-        
+
         common_tokens_dictionary, p_off, h_off, all_nouns_singles = common(
             premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2, already_exsiting_words
         )
 
 
-      
-        p_off_filler = suggest_mask_fillers(premise, p_off, filler_pipeline, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
+        p_off_filler = suggest_mask_fillers(premise, p_off, model, tokenizer, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
         if p_off_filler:
-      
+
           if premise in results_dict:
               results_dict[premise].update(p_off_filler)
           else:
               results_dict[premise] = p_off_filler
 
-        h_off_filler = suggest_mask_fillers(hypothesis, h_off, filler_pipeline, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
+        h_off_filler = suggest_mask_fillers(hypothesis, h_off, model, tokenizer, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
+
         if h_off_filler:
           if hypothesis in results_dict:
             results_dict[hypothesis].update(h_off_filler)
-        else:
-          results_dict[hypothesis] = h_off_filler      
+          else:
+            results_dict[hypothesis] = h_off_filler
+
     with open(output_file, "w") as f:
         json.dump(results_dict, f)
 
     return new_list3
 
-def process_dataset(first_data, second_data, ranked_overlap, neutral_number, entailment_number, contradiction_number, rank_option='top', sort_by_pos='no', id='no'):
+def process_and_save_dataset(result, output_file, neutral_number, entailment_number, contradiction_number, id='yes'):
+    """
+  
+    """
+
+    processed = process_unmasked_dataset(
+        result,
+        neutral_number=neutral_number,
+        entailment_number=entailment_number,
+        contradiction_number=contradiction_number,
+        id=id
+    )
+
+
+    with open(output_file, "w") as f:
+        json.dump(processed, f, indent=4)
+
+
+    try:
+        files.download(output_file)
+        return processed
+    except NameError:
+        print("Skipping file download (not running in Google Colab)")
+
+def filter_candidates(candidates, all_singles=None, excluded_words=None):
+    """
+   filter out unwatned words from json file
+    """
+    if excluded_words is None:
+        excluded_words = {
+            "n't", "not", "no", "never", "neither", "none", "nowise",
+            "nothing", "nobody", "nowhere", "non", "absent", "lacking",
+            "minus", "without", "'s", "'n'", "'re", "'m"
+        }
+
+    filtered = []
+
+    for candidate in candidates:
+        word = candidate.split(":")[0]
+        if word.startswith('##'):
+            continue
+
+        if all(char in string.punctuation for char in word):
+            continue
+
+        if word in excluded_words:
+            continue
+
+        if all_singles is not None:
+            word_with_space = ' ' + word
+
+            word_lower = word.lower()
+            word_lower_with_space = ' ' + word_lower
+            word_stripped = word.strip()
+            word_stripped_lower = word_stripped.lower()
+            word_stripped_with_space = ' ' + word_stripped
+            word_stripped_lower_with_space = ' ' + word_stripped_lower
+
+            if (word in all_singles or
+                word_with_space in all_singles or
+                word_lower in all_singles or
+                word_lower_with_space in all_singles or
+                word_stripped in all_singles or
+                word_stripped_with_space in all_singles or
+                word_stripped_lower in all_singles or
+                word_stripped_lower_with_space in all_singles):
+                continue
+        filtered.append(candidate)
+
+    return filtered
+
+
+def process_dataset(first_data, second_data, initial_dataset,split, min_common_words, mapping, ranked_overlap, pos_to_mask, neutral_number, source_1, source_2, entailment_number, contradiction_number, rank_option='top', sort_by_pos='no', id='no', num_sentences_to_process_dataset: int = None, num_sentences_compliant_criteria: int = None):
     """
     Matches premise and hypothesis from second_data with first_data, replaces words, applies ranking,
     transforms the dataset, and optionally groups it by POS tags.
@@ -384,51 +533,57 @@ def process_dataset(first_data, second_data, ranked_overlap, neutral_number, ent
     :param contradiction_number: number for contradiction label
     :param rank_option: 'top' for highest-ranked, int for specific rank, slice for multiple replacements.
     :param sort_by_pos: 'yes' to group the dataset by POS tags.
-    :param id: 'yes' to process a first_data file with masked suggestions that were recorded as sentence:id 
+    :param id: 'yes' to process a first_data file with masked suggestions that were recorded as sentence:id
     :return: Processed dataset with replaced words and transformed labels.
     """
 
     processed_data = []
-    pos_tagged_data = defaultdict(list)  
+    pos_tagged_data = defaultdict(list)
+    dataset = initial_dataset[split]
+    SNLI_filtered_2 = filter_snli(dataset, mapping, pos_to_mask, min_common_words,
+                                  num_sentences_to_process_dataset, num_sentences_compliant_criteria)
+    processed_second_data = pos_toks_extract_from_dataset(SNLI_filtered_2, mapping)
     label_counts = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
-    for entry in tqdm(second_data):
-        id = entry['id']
-        premise = entry['premise']
-        hypothesis = entry['hypothesis']
-        label = entry['label']
-
+    for entry in tqdm(processed_second_data):
+        id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h, label = (entry['id'], entry['premise'], entry['hypothesis'], entry['p_t'],entry['p_p'], entry['h_t'], entry['h_p'], entry['label'] )
+        common_dict, p_positions, h_positions, singles = common(premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2)
         if id =='yes':
           premise_id = f"{premise}:{id}"
           hypothesis_id = f"{hypothesis}:{id}"
-
         else:
           premise_id = premise
           hypothesis_id = hypothesis
 
-  
+
         word2fillers = defaultdict(list)
         word2probabilities = defaultdict(list)
         word2pos = defaultdict(list)
-     
-        
+
+
         for sentence_id in [premise_id, hypothesis_id]:
-          for i in first_data:
-            if sentence_id in i.keys():
-                
-                token_data = i[sentence_id]
-                
+        
+            if sentence_id in first_data.keys():
+
+                token_data = first_data[sentence_id]
+
                 for token_key, offsets in token_data.items():
-                    for offset, candidates in offsets.items():
-                        word, pos = token_key.split(":")  
-                        
-                       
-                        fillers = [c.split(":")[0] for c in candidates]
-                  
-                        probabilities = [float(c.split(":")[1]) for c in candidates]
+                  for offset, candidates in offsets.items():
+                    token_parts = token_key.split(":")
+                    word = token_parts[0].strip()
+
+                    pos = token_parts[1]
+                    token_prob = token_parts[2]
+                    if word.strip() in common_dict:
+
+                      filtered_candidates = filter_candidates(candidates, singles)
+                      if filtered_candidates:
+
+                        fillers = [c.split(":")[0] for c in filtered_candidates]
+                        probabilities = [float(c.split(":")[1]) for c in filtered_candidates]
 
                         word2fillers[word].append(fillers)
                         word2probabilities[word].append(probabilities)
-                        word2pos[word].append(pos)  
+                        word2pos[word].append(pos)
 
 
         words = {}
@@ -437,37 +592,51 @@ def process_dataset(first_data, second_data, ranked_overlap, neutral_number, ent
             words[w] = ranked_overlap(word2fillers[w], word2probabilities[w]).items()
             words[w] = sorted(words[w], key=lambda x: x[1]["average_rank"])
 
-   
-        assigned_pos_tags = set()  
+
+        assigned_pos_tags = set()
         sentence_variants = []
-           
+
         for w, ranked_fillers in words.items():
-        
+
             try:
                 if isinstance(rank_option, int):
-                   
+
                     if len(ranked_fillers)<rank_option-1:
                       continue
                     else:
                       best_ = ranked_fillers[rank_option][0].strip()
-                      
+
                       p_variant = re.sub(rf'\b{w}\b', best_, premise)
-                     
+
                       h_variant = re.sub(rf'\b{w}\b', best_, hypothesis)
                       sentence_variants.append((p_variant, h_variant))
-                    
+
                 elif isinstance(rank_option, slice):
-                 
+
                     for i in range(*rank_option.indices(len(ranked_fillers))):
                         best_ = ranked_fillers[i][0].strip()
                         p_variant = re.sub(rf'\b{w}\b', best_, premise)
-                       
+
                         h_variant = re.sub(rf'\b{w}\b', best_, hypothesis)
                         sentence_variants.append((p_variant, h_variant))
 
-               
+
                 assigned_pos_tags.update(word2pos[w])
                 for idx, (p_variant, h_variant) in enumerate(sentence_variants):
+                  
+                  if label == 'neutral':
+                      label_counts['neutral'] += 1
+                  elif label == 'entailment':
+                      label_counts['entailment'] += 1
+                  elif label == 'contradiction':
+                      label_counts['contradiction'] += 1
+
+                  if label=='neutral':
+                    label=neutral_number
+                  elif label=='entailment':
+                    label=entailment_number
+                  elif label=='contradiction':
+                    label=contradiction_number
 
                   processed_entry = {
                       'id': id,
@@ -479,27 +648,18 @@ def process_dataset(first_data, second_data, ranked_overlap, neutral_number, ent
                   if id == 'yes':
                       processed_entry['id'] = f"{id}_{idx}"
 
-               
-                  if label == neutral_number:
-                      label_counts['neutral'] += 1
-                  elif label == entailment_number:
-                      label_counts['entailment'] += 1
-                  elif label == contradiction_number:
-                      label_counts['contradiction'] += 1
-
-
                   if sort_by_pos == 'yes':
                           for pos_tag in assigned_pos_tags:
                               pos_tagged_data[pos_tag].append(processed_entry)
                   else:
                       processed_data.append(processed_entry)
-        
+
             except (IndexError, ValueError):
-                continue  
-            
-       
-            
-    print("\nLabel Counts:") 
+                continue
+
+
+
+    print("\nLabel Counts:")
     print(f"Neutral: {label_counts['neutral']}")
     print(f"Entailment: {label_counts['entailment']}")
     print(f"Contradiction: {label_counts['contradiction']}\n")
@@ -511,3 +671,153 @@ def process_dataset(first_data, second_data, ranked_overlap, neutral_number, ent
         return sorted_data
 
     return processed_data
+
+def create_dataset(data: List[Dict], include_id: bool, spark) -> datasets.Dataset:
+    """function to create dataset with or without ID column"""
+    columns = ['premise', 'hypothesis', 'label'] + (['id'] if include_id else [])
+    return datasets.Dataset.from_spark(
+        spark.createDataFrame(
+            pd.DataFrame(data, columns=columns, index=range(len(data)))
+        )
+    )
+
+def evaluate_nli_datasets(
+    dataset_file: str,
+    suggestion_file: str,
+    model_name: str,
+    dataset,
+    split: str,
+    min_common_words: int,
+    mapping: Dict,
+    ranked_overlap: bool,
+    pos_to_mask: str,
+    neutral_number: int,
+    source_1: str,
+    source_2: str,
+    entailment_number: int,
+    contradiction_number: int,
+    rank_option: slice,
+    sort_by_pos: str,
+    id: str,
+    num_sentences_to_process_dataset: int = None,
+    num_sentences_compliant_criteria: int = None
+) -> Dict[str, float]:
+    """
+    Evaluate NLI datasets using transformer models and compute sample accuracy and PA accuracy.
+    """
+
+    with open(dataset_file, 'r') as f:
+        data_ = json.load(f)
+
+    with open(suggestion_file, 'r') as f:
+        data_suggestions=json.load(f)
+
+    result_1 = data_[0]
+
+    processed_result = process_dataset(
+        data_suggestions, 
+        result_1,
+        dataset,
+        split,
+        min_common_words=min_common_words,
+        mapping=mapping,
+        ranked_overlap=ranked_overlap,
+        pos_to_mask=pos_to_mask,
+        neutral_number=neutral_number,
+        source_1=source_1,
+        source_2=source_2,
+        entailment_number=entailment_number,
+        contradiction_number=contradiction_number,
+        rank_option=rank_option,
+        sort_by_pos=sort_by_pos,
+        id=id,
+        num_sentences_compliant_criteria=num_sentences_compliant_criteria
+    )
+    
+    id_counts = Counter(item['id'] for item in processed_result)
+    filtered_data = [item for item in processed_result if id_counts[item['id']] >= 5]
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name, truncation=True)
+    preprocess_function = lambda d: tokenizer(d['premise'], d['hypothesis'], truncation=True)
+    
+
+    spark = SparkSession.builder.appName("merge").getOrCreate()
+    
+    results = {}
+    for dataset_name, dataset in [("seed", result_1), ("inflated", filtered_data)]:
+
+        encoded_data_normal = create_dataset(dataset, False, spark).map(
+            preprocess_function, batched=True, load_from_cache_file=True
+        )
+        encoded_data_with_id = create_dataset(dataset, True, spark).map(
+            preprocess_function, batched=True, load_from_cache_file=True
+        )
+
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3)
+        trainer = Trainer(
+            model=model,
+            eval_dataset=encoded_data_normal,
+            tokenizer=tokenizer,
+            compute_metrics=compute_metrics
+        )
+        results[f"{dataset_name}_sample_accuracy"] = trainer.evaluate()
+        
+
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3)
+        trainer = Trainer(
+            model=model,
+            eval_dataset=encoded_data_with_id,
+            tokenizer=tokenizer,
+            compute_metrics=compute_metrics_with_ids(encoded_data_with_id)
+        )
+        results[f"{dataset_name}_pattern_accuracy"] = trainer.evaluate()
+    
+
+    print(f"Model: {model_name}")
+    print(f"Configuration:")
+    print(f"- Entailment number: {entailment_number}")
+    print(f"- Neutral number: {neutral_number}")
+    print(f"- Contradiction number: {contradiction_number}")
+    
+    for metric_name, value in results.items():
+        print(f"\n{metric_name} results:")
+        print(value)
+    
+    return results, filtered_data, processed_result
+
+def compute_metrics_with_ids(eval_dataset):
+    ids = eval_dataset["id"] 
+  
+    def compute_metrics(eval_pred):
+        predictions, labels = eval_pred
+        predictions = np.argmax(predictions, axis=1)
+
+        id_groups = defaultdict(lambda: {"label": None, "predictions": []})
+
+        for id_, pred, label in zip(ids, predictions, labels):
+            id_groups[id_]["label"] = label  
+            id_groups[id_]["predictions"].append(pred) 
+
+        final_predictions = []
+        final_labels = []
+
+        for group in id_groups.values():
+           
+            if all(p == group["label"] for p in group["predictions"]):
+                final_predictions.append(group["label"])  
+            else:
+
+                final_predictions.append(-1)  
+
+            final_labels.append(group["label"])  
+        return metric.compute(predictions=final_predictions, references=final_labels)
+
+    return compute_metrics
+
+
+def compute_metrics(eval_pred):
+    metric = evaluate.load("accuracy")
+    predictions, labels = eval_pred
+    predictions = np.argmax(predictions, axis=1)
+    # print(predictions, labels)
+    return metric.compute(predictions=predictions, references=labels)
