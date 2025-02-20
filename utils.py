@@ -1,5 +1,5 @@
 #FIXME no explicit punctuaion definition but use the sent and tokens to get chr offsets
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, Trainer
+from transformers import pipeline, AutoTokenizer, AutoModelForMaskedLM, AutoModelForSequenceClassification, TrainingArguments, Trainer
 from typing import Dict, Callable, List, Tuple, List, Any
 import nltk
 import re
