@@ -784,7 +784,7 @@ def evaluate_nli_datasets(
         print(value)
     
     return results, filtered_data, processed_result
-
+metric = evaluate.load("accuracy")
 def compute_metrics_with_ids(eval_dataset):
     ids = eval_dataset["id"] 
   
@@ -816,7 +816,6 @@ def compute_metrics_with_ids(eval_dataset):
 
 
 def compute_metrics(eval_pred):
-    metric = evaluate.load("accuracy")
     predictions, labels = eval_pred
     predictions = np.argmax(predictions, axis=1)
     # print(predictions, labels)
