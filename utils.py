@@ -624,12 +624,7 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
                 assigned_pos_tags.update(word2pos[w])
                 for idx, (p_variant, h_variant) in enumerate(sentence_variants):
                   
-                  if label == 'neutral':
-                      label_counts['neutral'] += 1
-                  elif label == 'entailment':
-                      label_counts['entailment'] += 1
-                  elif label == 'contradiction':
-                      label_counts['contradiction'] += 1
+                  
 
                   if label=='neutral':
                     label=neutral_number
@@ -648,6 +643,13 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
                   if id == 'yes':
                       processed_entry['id'] = f"{id}_{idx}"
 
+                  if label == neutral_number:
+                      label_counts['neutral'] += 1
+                  elif label == entailment_number:
+                      label_counts['entailment'] += 1
+                  elif label == contradiction_number:
+                      label_counts['contradiction'] += 1
+                      
                   if sort_by_pos == 'yes':
                           for pos_tag in assigned_pos_tags:
                               pos_tagged_data[pos_tag].append(processed_entry)
