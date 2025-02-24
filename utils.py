@@ -740,7 +740,7 @@ def evaluate_nli_datasets(
     filtered_data = [item for item in processed_result if id_counts[item['id']] >= 5]
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, truncation=True)
-    preprocess_function = lambda d: tokenizer(d['premise'], d['hypothesis'], truncation=True, truncation=True, max_length=512)
+    preprocess_function = lambda d: tokenizer(d['premise'], d['hypothesis'], truncation=True, max_length=512)
     
 
     spark = SparkSession.builder.appName("merge1").getOrCreate()
