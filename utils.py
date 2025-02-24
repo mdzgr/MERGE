@@ -746,7 +746,7 @@ def evaluate_nli_datasets(
     spark = SparkSession.builder.appName("merge1").getOrCreate()
     
     results = {}
-    for dataset_name, dataset in [("seed", result_1), ("inflated", filtered_data)]:
+    for dataset_name, dataset in [("seed", result_1)]: #, ("inflated", filtered_data)
 
         encoded_data_normal = create_dataset(dataset, False, spark).map(
             preprocess_function, batched=True, load_from_cache_file=True
