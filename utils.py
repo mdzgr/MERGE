@@ -738,7 +738,9 @@ def evaluate_nli_datasets(
     
     id_counts = Counter(item['id'] for item in processed_result)
     filtered_data = [item for item in processed_result if id_counts[item['id']] >= 5]
-
+    print('filtered_sed', len(filtered_data))
+    ####exclude spark
+########FIXME print problems filtered_data
     tokenizer = AutoTokenizer.from_pretrained(model_name, truncation=True)
     preprocess_function = lambda d: tokenizer(d['premise'], d['hypothesis'], truncation=True, max_length=512)
     
@@ -746,7 +748,7 @@ def evaluate_nli_datasets(
     spark = SparkSession.builder.appName("merge1").getOrCreate()
     
     results = {}
-    for dataset_name, dataset in [("seed", result_1)]: #, ("inflated", filtered_data)
+    for dataset_name, dataset in [("seed", result_1), ("inflated", filtered_data)]: #, 
 
         encoded_data_normal = create_dataset(dataset, False, spark).map(
             preprocess_function, batched=True, load_from_cache_file=True
