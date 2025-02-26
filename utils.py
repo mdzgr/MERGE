@@ -23,6 +23,95 @@ import torch
 import torch.nn.functional as F
 
 
+def analyze_snli_criteria(dataset, mapping, pos_to_mask):
+    """
+    Analyzes the SNLI dataset to count how many examples meet specific criteria:
+    1. Both premise and hypothesis have length > 8 words
+    2. Share at least one common noun/verb based on specified POS tags
+    3. Have only one label
+
+    Args:
+        dataset: The SNLI dataset dictionary
+        mapping: Dictionary mapping sentences to their tokens and POS tags
+        pos_to_mask: POS tags to consider for word extraction
+
+    Returns:
+        Dictionary with analysis results
+    """
+    total_examples = len(dataset)
+    
+ 
+    long_sentences_count = 0
+    common_word_counts = {}  
+    single_label_count = 0
+    
+
+    long_and_common_count = 0
+    long_and_single_label_count = 0
+    common_and_single_label_count = 0
+    all_criteria_count = 0
+    
+    for k, p in dataset.items():
+        
+        is_long = len(p['p'].split()) >= 8 and len(p['h'].split()) >= 8
+        if is_long:
+            long_sentences_count += 1
+    
+        has_single_label = 'lcnt' in p and len(p['lcnt']) == 1
+        if has_single_label:
+            single_label_count += 1
+       
+        common_words = (
+            flatten_extracted_words(extract_nouns_and_verbs(mapping[p['p']]['pos'], mapping[p['p']]['tok'], pos_to_mask))
+            &
+            flatten_extracted_words(extract_nouns_and_verbs(mapping[p['h']]['pos'], mapping[p['h']]['tok'], pos_to_mask))
+        )
+        
+     
+        num_common = len(common_words)
+        common_word_counts[num_common] = common_word_counts.get(num_common, 0) + 1
+        
+
+        has_common_word = num_common >= 1
+        
+        if is_long and has_common_word:
+            long_and_common_count += 1
+            
+        if is_long and has_single_label:
+            long_and_single_label_count += 1
+            
+        if has_common_word and has_single_label:
+            common_and_single_label_count += 1
+            
+        if is_long and has_common_word and has_single_label:
+            all_criteria_count += 1
+
+    cumulative_common_counts = {}
+    total = 0
+    for i in range(max(common_word_counts.keys()) + 1):
+        count = common_word_counts.get(i, 0)
+        total += count
+        cumulative_common_counts[f"{i}+"] = total
+    
+
+    results = {
+        "total_examples": total_examples,
+        "long_sentences_count": long_sentences_count,
+        "long_sentences_percentage": (long_sentences_count / total_examples) * 100 if total_examples > 0 else 0,
+        "single_label_count": single_label_count,
+        "single_label_percentage": (single_label_count / total_examples) * 100 if total_examples > 0 else 0,
+        "common_words_distribution": common_word_counts,
+        "cumulative_common_words": cumulative_common_counts,
+        "combined_criteria": {
+            "long_and_common": long_and_common_count,
+            "long_and_single_label": long_and_single_label_count,
+            "common_and_single_label": common_and_single_label_count,
+            "all_criteria": all_criteria_count
+        }
+    }
+    
+    return results
+
 
 def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
     pos_tag_map = {
