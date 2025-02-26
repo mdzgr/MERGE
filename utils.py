@@ -450,7 +450,7 @@ def create_filler_file(
 
 def process_and_save_dataset(result, output_file, neutral_number, entailment_number, contradiction_number, id='yes'):
     """
-  
+   maps labels to numbers 
     """
 
     processed = process_unmasked_dataset(
@@ -543,7 +543,10 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
     SNLI_filtered_2 = filter_snli(dataset, mapping, pos_to_mask, min_common_words,
                                   num_sentences_to_process_dataset, num_sentences_compliant_criteria)
     processed_second_data = pos_toks_extract_from_dataset(SNLI_filtered_2, mapping)
-    label_counts = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
+    expected_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
+    
+  
+    actual_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
     for entry in tqdm(processed_second_data):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h, label = (entry['id'], entry['premise'], entry['hypothesis'], entry['p_t'],entry['p_p'], entry['h_t'], entry['h_p'], entry['label'] )
         common_dict, p_positions, h_positions, singles = common(premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2)
@@ -594,10 +597,28 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
 
 
         assigned_pos_tags = set()
-        sentence_variants = []
-
+        
+        # num_replacements_total = 0 
         for w, ranked_fillers in words.items():
-
+            expected_variants = 0
+            
+            if isinstance(rank_option, int):
+                if len(ranked_fillers) >= rank_option:
+                    expected_variants = 1
+            elif isinstance(rank_option, slice):
+                # Calculate how many variants would be generated from this slice
+                start, stop, step = rank_option.indices(len(ranked_fillers))
+                expected_variants = len(range(start, stop, step))
+            
+            # Add to expected generation count
+            if label == 'neutral':
+                expected_generation['neutral'] += expected_variants
+            elif label == 'entailment':
+                expected_generation['entailment'] += expected_variants
+            elif label == 'contradiction':
+                expected_generation['contradiction'] += expected_variants
+            sentence_variants = []
+           
             try:
                 if isinstance(rank_option, int):
 
@@ -610,7 +631,7 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
 
                       h_variant = re.sub(rf'\b{w}\b', best_, hypothesis)
                       sentence_variants.append((p_variant, h_variant))
-
+                      
                 elif isinstance(rank_option, slice):
 
                     for i in range(*rank_option.indices(len(ranked_fillers))):
@@ -619,36 +640,34 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
 
                         h_variant = re.sub(rf'\b{w}\b', best_, hypothesis)
                         sentence_variants.append((p_variant, h_variant))
-
+                       
 
                 assigned_pos_tags.update(word2pos[w])
+                # num_replacements_total += num_replacements 
                 for idx, (p_variant, h_variant) in enumerate(sentence_variants):
-                  
-                  
-
-                  if label=='neutral':
-                    label=neutral_number
-                  elif label=='entailment':
-                    label=entailment_number
-                  elif label=='contradiction':
-                    label=contradiction_number
+                  numeric_label = None
+    
+                  if label == 'neutral':
+                      numeric_label = neutral_number
+                      actual_generation['neutral'] += 1
+                  elif label == 'entailment':
+                      numeric_label = entailment_number
+                      actual_generation['entailment'] += 1
+                  elif label == 'contradiction':
+                      numeric_label = contradiction_number
+                      actual_generation['contradiction'] += 1
 
                   processed_entry = {
                       'id': id,
                       'premise': p_variant,
                       'hypothesis': h_variant,
-                      'label': label
+                      'label': numeric_label
                   }
 
                   if id == 'yes':
                       processed_entry['id'] = f"{id}_{idx}"
 
-                  if label == neutral_number:
-                      label_counts['neutral'] += 1
-                  elif label == entailment_number:
-                      label_counts['entailment'] += 1
-                  elif label == contradiction_number:
-                      label_counts['contradiction'] += 1
+
                       
                   if sort_by_pos == 'yes':
                           for pos_tag in assigned_pos_tags:
@@ -662,10 +681,10 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
 
 
     print("\nLabel Counts:")
-    print(f"Neutral: {label_counts['neutral']}")
-    print(f"Entailment: {label_counts['entailment']}")
-    print(f"Contradiction: {label_counts['contradiction']}\n")
-
+    print(f"Neutral: {actual_generation['neutral']} (Expected: {expected_generation['neutral']})")
+    print(f"Entailment: {actual_generation['entailment']} (Expected: {expected_generation['entailment']})")
+    print(f"Contradiction: {actual_generation['contradiction']} (Expected: {expected_generation['contradiction']})\n")
+    
     if sort_by_pos == 'yes':
         sorted_data = []
         for pos, entries in sorted(pos_tagged_data.items()):
@@ -683,111 +702,7 @@ def create_dataset(data: List[Dict], include_id: bool, spark) -> datasets.Datase
         )
     )
 
-def evaluate_nli_datasets(
-    dataset_file: str,
-    suggestion_file: str,
-    model_name: str,
-    dataset,
-    split: str,
-    min_common_words: int,
-    mapping: Dict,
-    ranked_overlap: bool,
-    pos_to_mask: str,
-    neutral_number: int,
-    source_1: str,
-    source_2: str,
-    entailment_number: int,
-    contradiction_number: int,
-    rank_option: slice,
-    sort_by_pos: str,
-    id: str,
-    num_sentences_to_process_dataset: int = None,
-    num_sentences_compliant_criteria: int = None
-) -> Dict[str, float]:
-    """
-    Evaluate NLI datasets using transformer models and compute sample accuracy and PA accuracy.
-    """
-
-    with open(dataset_file, 'r') as f:
-        data_ = json.load(f)
-
-    with open(suggestion_file, 'r') as f:
-        data_suggestions=json.load(f)
-
-    result_1 = data_[0]
-
-    processed_result = process_dataset(
-        data_suggestions, 
-        result_1,
-        dataset,
-        split,
-        min_common_words=min_common_words,
-        mapping=mapping,
-        ranked_overlap=ranked_overlap,
-        pos_to_mask=pos_to_mask,
-        neutral_number=neutral_number,
-        source_1=source_1,
-        source_2=source_2,
-        entailment_number=entailment_number,
-        contradiction_number=contradiction_number,
-        rank_option=rank_option,
-        sort_by_pos=sort_by_pos,
-        id=id,
-        num_sentences_compliant_criteria=num_sentences_compliant_criteria
-    )
-    
-    id_counts = Counter(item['id'] for item in processed_result)
-    filtered_data = [item for item in processed_result if id_counts[item['id']] >= 5]
-    print('filtered_sed', len(filtered_data))
-    ####exclude spark
-########FIXME print problems filtered_data
-    tokenizer = AutoTokenizer.from_pretrained(model_name, truncation=True)
-    preprocess_function = lambda d: tokenizer(d['premise'], d['hypothesis'], truncation=True, max_length=512)
-    
-
-    spark = SparkSession.builder.appName("merge1").getOrCreate()
-    
-    results = {}
-    for dataset_name, dataset in [("seed", result_1), ("inflated", filtered_data)]: #, 
-
-        encoded_data_normal = create_dataset(dataset, False, spark).map(
-            preprocess_function, batched=True, load_from_cache_file=True
-        )
-        encoded_data_with_id = create_dataset(dataset, True, spark).map(
-            preprocess_function, batched=True, load_from_cache_file=True
-        )
-
-        model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3)
-        trainer = Trainer(
-            model=model,
-            eval_dataset=encoded_data_normal,
-            tokenizer=tokenizer,
-            compute_metrics=compute_metrics
-        )
-        results[f"{dataset_name}_sample_accuracy"] = trainer.evaluate()
-        
-
-        model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3)
-        trainer = Trainer(
-            model=model,
-            eval_dataset=encoded_data_with_id,
-            tokenizer=tokenizer,
-            compute_metrics=compute_metrics_with_ids(encoded_data_with_id)
-        )
-        results[f"{dataset_name}_pattern_accuracy"] = trainer.evaluate()
-    
-
-    print(f"Model: {model_name}")
-    print(f"Configuration:")
-    print(f"- Entailment number: {entailment_number}")
-    print(f"- Neutral number: {neutral_number}")
-    print(f"- Contradiction number: {contradiction_number}")
-    
-    for metric_name, value in results.items():
-        print(f"\n{metric_name} results:")
-        print(value)
-    
-    return results, filtered_data, processed_result
+   
 metric = evaluate.load("accuracy")
 def compute_metrics_with_ids(eval_dataset):
     ids = eval_dataset["id"] 
@@ -824,3 +739,7 @@ def compute_metrics(eval_pred):
     predictions = np.argmax(predictions, axis=1)
     # print(predictions, labels)
     return metric.compute(predictions=predictions, references=labels)
+
+
+
+
