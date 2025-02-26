@@ -114,16 +114,26 @@ def analyze_snli_criteria(dataset, mapping, pos_to_mask):
 
 
 def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
-    pos_tag_map = {
-        'noun': {'NN', 'NNS'},
-        'verb': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'},
-        'adjective': {'JJ'},
-        'adverb': {'RB'},
-        'merged_n_a': {'NN', 'NNS', 'JJ'},
-        'merged_v_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'NN', 'NNS'},
-        'merged_v_a': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB'},
-        'merged_v_a_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'NN', 'NNS'}
-    }
+    """
+    Extracts the positions of specific parts of speech (POS) within a sentence.
+
+    identifies tokens that match the specified POS type and records their positions.
+
+    Args:
+        pos_tags (list of str): A list of POS tags corresponding to the tokens.
+        tokens (list of str): A list of words/tokens in the sentence.
+        source (str): The source identifier of the text (e.g., premise/hypothesis).
+        pos_type (str): The category of POS to extract. Possible options: noun, verb, adjective, adverb, merged_n_a, merged_v_n, merged_v_a, merged_v_a_n
+        sentence (str): The full sentence.
+
+    returns: 
+    A dictionary where keys are matched tokens, and values are dictionaries containing:
+            - 'positions' (list of tuples): Start and end character offsets in the sentence.
+            - 'pos' (str): The POS tag of the token.
+            - 'source' (str): The source identifier.
+            - 'preceding_text' (str): The text preceding the token in the sentence.
+
+    """
 
 
     #"n't", "not", "no", "Never", "neither", "none", "nowise", "nothing", "nobody", "nowhere", "non", "absent", "lacking", "minus", "without", "'s", "'n'", "'re", "'m"
@@ -173,7 +183,6 @@ def generate_mask_predictions(model, tokenizer, context, mask_token, target_word
         mask_token: The mask token (e.g., <mask> or [MASK])
         target_word: The word whose probability we want to retrieve (optional)
         top_k: The number of predictions to return
-        debug: Whether to print debugging information
     """
     if mask_token not in context:
         raise ValueError(f"Context must contain the mask token: {mask_token}")
@@ -193,7 +202,7 @@ def generate_mask_predictions(model, tokenizer, context, mask_token, target_word
     target_probability = None
     target_tokens = tokenizer(target_word, add_special_tokens=False)['input_ids']
     if len(target_tokens) > 1:
-        # print(f"Warning: The word '{target_word}' is split into multiple tokens: {target_tokens}")
+        
         target_probability='None'
     else:
       target_token_id = target_tokens[0]
@@ -215,7 +224,6 @@ def generate_mask_predictions(model, tokenizer, context, mask_token, target_word
 def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
                          model, tokenizer, all_single_words, common_tokens, suggestion_n=50) -> Dict[Tuple[int,int], List[str]]:
     """ mask_offsets is a list of integer pairs that mark the part of teh string input taht needs to be masked.
-        It is a list because in general it might be needed to mask several parts of the input string.
         Returns a dictionary with character offsets as keys and a list of ranked suggestions as values.
     """
     model_architecture = model.config.architectures[0].lower()
@@ -289,6 +297,9 @@ def ranked_overlap(list_of_lists, probs):
     return s_ranks
 
 def extract_nouns_and_verbs(pos_tags, tokens, pos_type):
+    """
+    takes each pos tag and token and outputs a dictionary with only the tokens that have the searched pos tag
+    """
         noun_tags = {'NN', 'NNS'}
         verb_tags = {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'}
         adjective_tags = {'JJ'}
@@ -339,6 +350,9 @@ def extract_nouns_and_verbs(pos_tags, tokens, pos_type):
             raise ValueError("Invalid pos_type. Choose 'noun', 'verb', 'adjective', 'adverb', 'merged_n_a', 'merged_v_n', 'merged_v_a', or ' 'merged_v_a_n''.")
 
 def flatten_extracted_words(extracted):
+    """
+    function that makes sure the output of the extracted tokens from extract_nouns_and_verbs is not NUll
+    """
   if isinstance(extracted, set):
       return extracted
   elif isinstance(extracted, dict):
@@ -349,7 +363,12 @@ def flatten_extracted_words(extracted):
   return set()
 
 def filter_snli(dataset, mapping, pos_to_mask, min_common_words, num_sentences_to_process, max_filtered_count=None):
-
+    """
+    filters sentences from the initial SNLI dataset that comply to different criteria:
+    min 8 words per premise, hypothesis 
+    one label
+    and a certain number of common pos tags
+    """
     filtered = {}
     count = 0
 
@@ -374,6 +393,7 @@ def filter_snli(dataset, mapping, pos_to_mask, min_common_words, num_sentences_t
 
 
 def process_unmasked_dataset(filtered_list_1, neutral_number, entailment_number, contradiction_number, id) -> List[Dict]:
+    """maps items from a dictionary or list that have entries for id, premise, hypothesis and label to have numbers for their labels"""
   new_list4 = []
 
   label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
@@ -441,7 +461,28 @@ def is_sentence_fully_processed(sentence, filler_data, common_tokens_dictionary)
   return required_keys.issubset(existing_keys)
 
 def common(sentence1, sentence2, pos_sent_1, pos_sent_2, toks_sent_1, toks_sent_2, pos_type, source_1, source_2, singles='yes'):
+    """
+    Finds common tokens of a specified POS type between two sentences.
 
+    Args:
+        sentence1 (str): First sentence.
+        sentence2 (str): Second sentence.
+        pos_sent_1 (list of str): POS tags for `sentence1`.
+        pos_sent_2 (list of str): POS tags for `sentence2`.
+        toks_sent_1 (list of str): Tokens of `sentence1`.
+        toks_sent_2 (list of str): Tokens of `sentence2`.
+        pos_type (str): POS type to extract (e.g., 'noun', 'verb').
+        source_1 (str): Source identifier for `sentence1`, e.g. premise/hypothesis.
+        source_2 (str): Source identifier for `sentence2`.
+        singles (str, optional): If 'yes', returns all nouns.
+
+    Returns:
+            - dict: Common tokens with metadata from extract_pos_position.
+            - list: Positions of common tokens in `sentence1`.
+            - list: Positions of common tokens in `sentence2`.
+            - set or None: all nouns
+    
+    """
     extracted_1 = extract__pos_position(pos_sent_1, toks_sent_1, source_1, pos_type, sentence1)
 
     extracted_2 = extract__pos_position(pos_sent_2, toks_sent_2, source_2, pos_type, sentence2)
@@ -614,15 +655,15 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
     Matches premise and hypothesis from second_data with first_data, replaces words, applies ranking,
     transforms the dataset, and optionally groups it by POS tags.
 
-    :param first_data: The dataset containing suggestions
-    :param second_data: The dataset containing 'id', 'premise', 'hypothesis', and 'label'.
-    :param ranked_overlap: The function that ranks words based on probability.
-    :param neutral_number: number for neutral label
-    :param entailment_number: number for entailment label
-    :param contradiction_number: number for contradiction label
-    :param rank_option: 'top' for highest-ranked, int for specific rank, slice for multiple replacements.
-    :param sort_by_pos: 'yes' to group the dataset by POS tags.
-    :param id: 'yes' to process a first_data file with masked suggestions that were recorded as sentence:id
+    :first_data: The dataset containing suggestions
+    :second_data: The dataset containing 'id', 'premise', 'hypothesis', and 'label'.
+    :ranked_overlap: The function that ranks words based on probability.
+    :neutral_number: number for neutral label
+    :entailment_number: number for entailment label
+    :contradiction_number: number for contradiction label
+    :rank_option: 'top' for highest-ranked, int for specific rank, slice for multiple replacements.
+    :sort_by_pos: 'yes' to group the dataset by POS tags.
+    :id: 'yes' to process a first_data file with masked suggestions that were recorded as sentence:id
     :return: Processed dataset with replaced words and transformed labels.
     """
 
@@ -783,7 +824,7 @@ def process_dataset(first_data, second_data, initial_dataset,split, min_common_w
     return processed_data
 
 def create_dataset(data: List[Dict], include_id: bool, spark) -> datasets.Dataset:
-    """function to create dataset with or without ID column"""
+    """function to create dataset with or without ID column with spark"""
     columns = ['premise', 'hypothesis', 'label'] + (['id'] if include_id else [])
     return datasets.Dataset.from_spark(
         spark.createDataFrame(
@@ -794,6 +835,7 @@ def create_dataset(data: List[Dict], include_id: bool, spark) -> datasets.Datase
    
 metric = evaluate.load("accuracy")
 def compute_metrics_with_ids(eval_dataset):
+    """pattern accuracy"""
     ids = eval_dataset["id"] 
   
     def compute_metrics(eval_pred):
@@ -824,6 +866,7 @@ def compute_metrics_with_ids(eval_dataset):
 
 
 def compute_metrics(eval_pred):
+    """sample_accuracy"""
     predictions, labels = eval_pred
     predictions = np.argmax(predictions, axis=1)
     # print(predictions, labels)
