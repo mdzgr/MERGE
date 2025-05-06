@@ -942,8 +942,8 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
                 else:
                     per_label_accuracies[label][threshold] = None
 
-  if model not in dictionary_results:
-      dictionary_results[model] = []
+  if model not in dictionary_result:
+      dictionary_result[model] = []
   key_name = (
             "pattern_accuracy" if type_evaluation == 0 else
             "consistency_accuracy_first" if type_evaluation == 1 else
@@ -959,7 +959,7 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
   if calculate_per_label:
       result_dict["per_label_accuracies"] = per_label_accuracies
 
-  dictionary_results[model].append(result_dict)
+  dictionary_result[model].append(result_dict)
 
   print("SAMPLE Accuracy:", normal_accuracy)
   for threshold, acc in nested_accuracies.items():
@@ -975,7 +975,7 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
   return_dict = {
         "normal_accuracy": normal_accuracy,
         "nested_accuracies": nested_accuracies,
-        "dictionary_results": dictionary_results
+        "dictionary_results": dictionary_result
     }
 
   return return_dict
