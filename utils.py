@@ -21,6 +21,7 @@ from evaluate import evaluator
 from google.colab import files
 import torch
 import torch.nn.functional as F
+import evaluate
 
 
 
@@ -775,3 +776,375 @@ def generate_output_filenames(suggestion_file, number_inflation="10"):
     pos_to_mask = pos_full
 
     return output_processed_dataset, output_initial, output_all_inflated, output_all_sample, pos_to_mask
+
+
+def map_labels_to_numbers(dataset, model_name):
+    """
+    Converts string labels to numeric labels based on the given model.
+
+    Args:
+        dataset (list of dict): Each dict should have a key 'label' with a string value.
+        model_name (str): The name of the model; this will determine which mapping to use.
+
+    Returns:
+        list of dict: A new dataset with the 'label' values replaced by numbers.
+    """
+
+    if "bert" in model_name.lower():
+        label_mapping = {'entailment': 1, 'neutral':2 , 'contradiction': 0}
+    if "roberta" in model_name.lower():
+        label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
+    if "deberta" in model_name.lower():
+        label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
+    if "albert-xxlarge-v2" in model_name.lower():
+          label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
+    if "bart" in model_name.lower():
+        label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
+
+    new_dataset = []
+    for entry in dataset:
+
+        new_entry = entry.copy()
+        original_label = new_entry.get('label')
+        new_entry['label'] = label_mapping.get(original_label, -1)
+        new_dataset.append(new_entry)
+    return new_dataset
+
+def predictions_nli(model_name, data_json_file, batch_size_number, device_g_c, batch_function, tok_model_function):
+    """
+    takes model_name from HUGface, the dataset of inflated procssed dataset, and a batch size
+    outputs: a json file with the input file name, model name and its predictions
+    ***Note json file has to contain premise and hypothesis
+    """
+    with open(data_json_file, "r") as f:
+        data = json.load(f)
+    data = map_labels_to_numbers(data, model_name)
+
+    moodels={
+        "textattack/bert-base-uncased-snli": "textattack/bert",
+        "ynie/roberta-large-snli_mnli_fever_anli_R1_R2_R3-nli": "ynie/roberta",
+        "ynie/albert-xxlarge-v2-snli_mnli_fever_anli_R1_R2_R3-nli": "ynie/albert",
+        "ynie/bart-large-snli_mnli_fever_anli_R1_R2_R3-nli": "ynie/bart"
+    }
+    tokenizer, model_cpu = tok_model_function(model_name)
+    model_cpu.to(device_g_c)
+    prem_hypo_list = [(item['premise'], item['hypothesis']) for item in data]
+    preds2 = batch_function(tokenizer, model_cpu, prem_hypo_list, batch_size=batch_size_number, device=device_g_c)
+    output = {
+        "input_file": data_json_file,
+        "model": model_name,
+        "predictions": preds2
+    }
+    safe_model_name = model_name.replace('/', '_')
+    output_filename = f"{data_json_file.rsplit('.', 1)[0]}_{safe_model_name}_predictions.json"
+    with open(output_filename, "w") as f:
+        json.dump(output, f, indent=4, default=lambda o: o.item() if hasattr(o, "item") else o)
+    return output, output_filename
+
+def merge_data_and_predictions(data_json_file, predictions_file, model_name):
+    '''merges documents of the inflated dataset and the predictions from the model by zipping the data from json'''
+    with open(data_json_file, "r") as f:
+        data = json.load(f)
+    with open(predictions_file, "r") as f:
+        predictions_dict = json.load(f)
+    merged = []
+    data = map_labels_to_numbers(data, model_name)
+    file_name=predictions_dict.get("input_file")
+    model=predictions_dict.get("model")
+    predictions = predictions_dict.get("predictions", [])
+    if len(data) != len(predictions):
+        print(f"Warning: Number of data items ({len(data)}) and predictions ({len(predictions)}) do not match.")
+    for original, pred in zip(data, predictions):
+        merged_entry = {
+            'input_file': file_name,
+            'model': model,
+            'id': original.get('id'),
+            'premise': original.get('premise'),
+            'hypothesis': original.get('hypothesis'),
+            'gold_label': original.get('label'),
+            'label_index': pred.get('label_index'),
+            'label': pred.get('label'),
+            'prob': pred.get('prob'),
+            'probs': pred.get('probs')
+        }
+        merged.append(merged_entry)
+    output_filename = data_json_file.rsplit('.', 1)[0] + '_merged.json'
+    with open(output_filename, 'w') as f:
+        json.dump(merged, f, indent=4)
+
+    return merged, output_filename
+
+def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thresholds_list:list, id_type: int, calculate_per_label=False):
+  with open(json_filepath, "r") as f:
+        data = json.load(f)
+  model=data[0]['model']
+  input_file=data[0]['input_file']
+
+  predictions = [entry["label_index"] for entry in data]
+  references = [entry["gold_label"] for entry in data]
+  metric = evaluate.load("accuracy")
+
+  normal_result = metric.compute(predictions=predictions, references=references)
+  normal_accuracy = normal_result["accuracy"]
+  groups = defaultdict(lambda: {"predictions": [], "label": None})
+  for entry in data:
+      if id_type==0:
+        id_prefix = entry["id"].split(":")[0]
+      else:
+        id_prefix=entry["id"]
+      groups[id_prefix]["predictions"].append(entry["label_index"])
+      if groups[id_prefix]["label"] is None:
+          groups[id_prefix]["label"] = entry["gold_label"]
+
+  thresholds = thresholds_list
+  nested_accuracies = {}
+
+  if calculate_per_label:
+        unique_labels = set(references)
+        per_label_accuracies = {label: {} for label in unique_labels}
+
+  for threshold in thresholds:
+      nested_final_predictions = []
+      nested_labels = []
+      if calculate_per_label:
+            label_predictions = {label: [] for label in unique_labels}
+            label_references = {label: [] for label in unique_labels}
+      for group in groups.values():
+          if type_evaluation==0:
+            true_label = group["label"]
+          if type_evaluation==1:
+            true_label=group["predictions"][0]
+          if type_evaluation == 2:
+            true_label = Counter(group["predictions"]).most_common(1)[0][0]
+
+          preds = group["predictions"]
+          correct_ratio = sum(1 for pred in preds if pred == true_label) / len(preds)
+
+          if correct_ratio >= threshold:
+              nested_final_predictions.append(true_label)
+          else:
+              nested_final_predictions.append(-1)
+          nested_labels.append(true_label)
+          if calculate_per_label:
+                label_predictions[true_label].append(nested_final_predictions[-1])
+                label_references[true_label].append(true_label)
+      nested_result = metric.compute(predictions=nested_final_predictions, references=nested_labels)
+      nested_accuracies[threshold] = nested_result["accuracy"]
+      if calculate_per_label:
+            for label in unique_labels:
+                if len(label_references[label]) > 0:
+                    label_result = metric.compute(
+                        predictions=label_predictions[label],
+                        references=label_references[label]
+                    )
+                    per_label_accuracies[label][threshold] = label_result["accuracy"]
+                else:
+                    per_label_accuracies[label][threshold] = None
+
+  if model not in dictionary_results:
+      dictionary_results[model] = []
+  key_name = (
+            "pattern_accuracy" if type_evaluation == 0 else
+            "consistency_accuracy_first" if type_evaluation == 1 else
+            "majority_accuracy"
+        )
+
+  result_dict = {
+    "input_file": json_filepath,
+    "normal_accuracy": normal_accuracy,
+    key_name: nested_accuracies
+  }
+
+  if calculate_per_label:
+      result_dict["per_label_accuracies"] = per_label_accuracies
+
+  dictionary_results[model].append(result_dict)
+
+  print("SAMPLE Accuracy:", normal_accuracy)
+  for threshold, acc in nested_accuracies.items():
+      print(f"PATTERN Accuracy at threshold {threshold}: {acc}")
+
+  if calculate_per_label:
+        print("\nPer-label accuracies:")
+        for label in unique_labels:
+            print(f"Label {label}:")
+            for threshold, acc in per_label_accuracies[label].items():
+                print(f"  Threshold {threshold}: {acc}")
+
+  return_dict = {
+        "normal_accuracy": normal_accuracy,
+        "nested_accuracies": nested_accuracies,
+        "dictionary_results": dictionary_results
+    }
+
+  return return_dict
+
+
+def parse_input_file(input_file):
+    """
+    Given an input file path with a filename like:
+    /.../bert-base-cased.1.adjective.200.test.inflated.for.bert.10.json
+    returns a tuple: (model_generated, pos_tag, number_inflation)
+    """
+    base = os.path.basename(input_file)
+    parts = base.split('.')
+
+    if len(parts) < 7:
+        return ("", "", "")
+    model_generated = parts[0]
+    pos_tag = parts[2]
+    number_inflation = parts[-2]
+    inflated=parts[5]
+    return model_generated, pos_tag, number_inflation, inflated
+
+def build_ascii_table(dictionary_results, type_eval, threshold_1:list, readme_filepath="README.txt", threshold="all"):
+    """
+    Builds an ASCII table with columns:
+    model_tested, generated_with, pos, type_dataset, no. inflation, sample accuracy,
+    and pattern accuracy (either one column if a specific threshold is provided,
+    or five columns if threshold=="all").
+
+    The table is printed and saved to the specified readme_filepath.
+    """
+    if threshold == "all":
+        header = (
+            f"| {'model_tested':<20} | {'generated_with':<30} | {'pos':<18} | "
+            f"{'type_dataset':<18} | {'no. inflation':<18} | {'sample accuracy':<17} "
+        )
+        thresholds = threshold_1
+        for t in thresholds:
+            header += f"| {(type_eval)+'accuracy (' + str(t) + ')':<28} "
+        header += "|"
+    else:
+        header = (
+            f"| {'model_tested':<20} | {'generated_with':<30} | {'pos':<18} | "
+            f"{'type_dataset':<18} | {'no. inflation':<18} | {'sample accuracy':<17} | "
+            f"{(type_eval)+' accuracy (thresh ' + str(threshold) + ')':<28} |"
+        )
+    separator = "-" * len(header)
+    rows = [header, separator]
+
+    for model_tested, results in dictionary_results.items():
+        for entry in results:
+            model_generated, pos_tag, number_inflation, type_dat = parse_input_file(entry["input_file"])
+            name_parts = model_tested.split('-')
+            name_parts_mod = name_parts[0].split('/')
+            model_test = name_parts_mod[1]
+            if type_dat == 'samp':
+                model_generated = 'none'
+
+            sample_acc = entry['normal_accuracy']
+            if threshold == "all":
+                pattern_acc_cells = ""
+                key = f"{type_eval}_accuracy"
+                for t in threshold_1:
+                    pattern_acc_cells += f"| {entry[key][t]:<28.4f} "
+                row = (
+                    f"| {model_test:<20} | {model_generated:<30} | {pos_tag:<18} | "
+                    f"{type_dat:<18} | {number_inflation:<18} | {sample_acc:<17.4f} {pattern_acc_cells}|"
+                )
+            else:
+                pattern_acc = entry[f"{type_eval}_accuracy"][threshold]
+                row = (
+                    f"| {model_test:<20} | {model_generated:<30} | {pos_tag:<18} | "
+                    f"{type_dat:<18} | {number_inflation:<18} | {sample_acc:<17.4f} | {pattern_acc:<28.4f} |"
+                )
+            rows.append(row)
+
+    table_str = "\n".join(rows)
+    print(table_str)
+
+    with open(readme_filepath, "w") as f:
+        f.write(table_str)
+
+    return table_str
+
+def filter_entries_by_id(input_file1, input_file2, output_file="filtered_entries.json", missing_output_file="missing_entries.json"):
+    with open(input_file1, 'r') as f:
+        entries = json.load(f)
+
+    with open(input_file2, 'r') as f:
+        reference_entries = json.load(f)
+
+    entry_ids = {entry['id'] for entry in entries}
+    reference_ids = {entry['id'] for entry in reference_entries}
+
+    filtered_entries = [entry for entry in entries if entry['id'] in reference_ids]
+    missing_entries = [entry for entry in reference_entries if entry['id'] not in entry_ids]
+
+    with open(output_file, 'w') as f:
+        json.dump(filtered_entries, f, indent=2)
+
+    with open(missing_output_file, 'w') as f:
+        json.dump(missing_entries, f, indent=2)
+
+    print(f"✔ Found {len(filtered_entries)} matching entries from {input_file1}. Saved to {output_file}")
+    print(f"❗ Found {len(missing_entries)} missing entries from {input_file2}. Saved to {missing_output_file}")
+
+    return filtered_entries, missing_entries
+
+
+def batch_filter_entries_colab():
+    merged_files = glob.glob("*_merged.json")
+
+    for merged_file in merged_files:
+        base_id = merged_file.replace("_merged.json", "")
+        reference_file = f"{base_id}.json"
+        predicted_file = f"{base_id}_predicted_first.json"
+        to_predict_file = f"{base_id}_to_predict.json"
+
+        if not os.path.exists(reference_file):
+            print(f"Reference file not found for {base_id}")
+            continue
+
+        filter_entries_by_id(
+            input_file1=merged_file,
+            input_file2=reference_file,
+            output_file=predicted_file,
+            missing_output_file=to_predict_file
+        )
+
+def combine_predicted_and_to_predict():
+    predicted_files = glob.glob("*_predicted_first.json")
+
+    for predicted_file in predicted_files:
+        base_id = predicted_file.replace("_predicted_first.json", "")
+        to_predict_file = f"{base_id}_to_predict_merged.json"
+
+        if not os.path.exists(to_predict_file):
+            print(f" Missing: {to_predict_file}")
+            continue
+        with open(predicted_file, 'r') as f:
+            predicted_data = json.load(f)
+        with open(to_predict_file, 'r') as f:
+            to_predict_data = json.load(f)
+        combined_data = predicted_data + to_predict_data
+        combined_filename = f"{base_id}_combined.json"
+        with open(combined_filename, 'w') as f:
+            json.dump(combined_data, f, indent=2)
+
+        print(f"Combined and saved: {combined_filename}")
+
+
+def filter_predictions_by_gold_ids(base_file, ref_file1, ref_file2, ref_file3, ref_file4):
+    ref_files = [ref_file1, ref_file2, ref_file3, ref_file4]
+    matching_entries = []
+    seen_ids = set()
+
+    for file in ref_files:
+          with open(file, 'r') as f:
+              ref_entries = json.load(f)
+              for entry in ref_entries:
+                  matching_entries.append(entry)
+    base_name = os.path.splitext(os.path.basename(base_file))[0]
+    output_file = f"{base_name}_combined.json"
+
+    with open(output_file, 'w') as f:
+        json.dump(matching_entries, f, indent=2)
+
+    print(f"{len(matching_entries)} matched prediction entries.")
+
+    return matching_entries
+
+
+
