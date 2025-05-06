@@ -476,7 +476,241 @@ def ranked_overlap(list_of_lists, probs):
     return s_ranks
 
 
+def pos_filtered(candidates, allowed_tags):
+    '''takes a list of suggestions from models and classifies their pos tags with spacy'''
+    words = [c.split(":")[0] for c in candidates]
+    tagged = list(nlp.pipe(words))
+    return [c for c, doc in zip(candidates, tagged)
+        if doc[0].tag_ in allowed_tags]
 
+def process_dataset(first_data, optional_dataset, initial_dataset,split, output_file, min_common_words, mapping, ranked_overlap, pos_to_mask, neutral_number, source_1, source_2, entailment_number, contradiction_number, an_no, prem_n, hypo_n, number_of_minimal_suggestions, cleaned:str=None, rank_option='top', sort_by_pos='no', id='no', num_sentences_to_process_dataset: int = None, num_sentences_compliant_criteria: int = None,  debug:str=None):
+    """
+    Matches premise and hypothesis from second_data with first_data, replaces words, applies ranking,
+    transforms the dataset, and optionally groups it by POS tags.
+
+    first_data: file that has suggestions of models
+    optional_dataset: None (defult), or file that has the seed sentences for the inflated dataset we want to obtain, othewrise the SNLI dataset will be filtered
+                      for certain criteria to find the seed sentences
+    initial_dataset: dataset to be filtered, e.g. SNLI
+    split: split of dataset to be filtered, e.g. test
+    output_file: name of the output file
+    min_common_words: for filtering, minimum number of common words between premise and hypothesis
+    mapping: dict with sent annotations from dataset
+    ranked_overlap: function that ranks words based on their position in the lists
+    pos_to_mask: pos tag to be looked for to be common bt premise and hypothesis
+    neutral_number: number for neutral label/ string 'neutral' (will appear as ref in the inf dataset) 
+    source_1: the title the first sentence has in the dataset, e.g. premise
+    source_2: the title the second sentence has in the dataset, e.g. hypothesis
+    entailment_number: number for entailment label/ string 'entailment' (will appear as ref in the inf dataset) 
+    contradiction_number: number for contradiction label/ string 'contradiction' (will appear as ref in the inf dataset)
+    an_no: number of maximum annotators (anything lower than)
+    prem_n: number of words in premise
+    hypo_n: numberr of words in hypo
+    number_of_minimal_suggestions: the lowest number of common suggestion between premise and hypothesis
+    cleaned:str=None, if == 'separated' the created dataset will only contain same pos tags as the initial masked word
+    rank_option='top' : rank function || values'top' for highest-ranked, int for specific rank, slice for multiple replacements.
+    sort_by_pos= 'no' (default), 'yes' to group the dataset by POS tags > the dataset will be embedded in  another dataset that has pos tags as entries
+    id='no': if premsie/hypothesis text has the id of the problem after it 
+    num_sentences_to_process_dataset: int = None: if specified will stop after this number of sentences are process from the dataset, regardless if they are compliant to filtering criteria or not
+    num_sentences_compliant_criteria: int = None: if specified will stop after this number of sentences are process from the dataset that are compliant to filtering criteria
+    debug:str=None, will print some statements for debugging if 'yes'
+    """
+    pos_filter_map = {
+    'noun': {'NN', 'NNS', 'NNP', 'NNPS'},
+    'verb': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'},
+    'adjective': {'JJ'},
+    'adverb': {'RB'},
+    'merged_n_a': {'NN', 'NNS', 'NNP', 'NNPS', 'JJ'},
+    'merged_v_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'NN', 'NNS'},
+    'merged_v_a': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB'},
+    'merged_v_a_n': {'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'RB', 'NN', 'NNS'}
+    }
+    processed_data = []
+    pos_tagged_data = defaultdict(list)
+    dataset = initial_dataset[split]
+    if optional_dataset != None:
+      SNLI_filtered_2=optional_dataset
+    else:
+      SNLI_filtered_2 = filter_snli(dataset, mapping, pos_to_mask, min_common_words,
+                                    num_sentences_to_process_dataset, num_sentences_compliant_criteria, an_no, prem_n, hypo_n)
+    processed_second_data = pos_toks_extract_from_dataset(SNLI_filtered_2, mapping)
+    new_list3, labels_sample = process_unmasked_dataset(processed_second_data, neutral_number, entailment_number, contradiction_number, id='yes')
+    expected_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
+    actual_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
+    premise_diff_total = 0
+    hypothesis_diff_total = 0
+    count = 0
+    count_word_not_enough_sol=0
+    for entry in tqdm(processed_second_data):
+        id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h, label = (entry['id'], entry['premise'], entry['hypothesis'], entry['p_t'],entry['p_p'], entry['h_t'], entry['h_p'], entry['label'] )
+
+        if id =='yes':
+          premise_id = f"{premise}:{id}"
+          hypothesis_id = f"{hypothesis}:{id}"
+        else:
+          premise_id = premise
+          hypothesis_id = hypothesis
+        word2fillers = defaultdict(list)
+        word2probabilities = defaultdict(list)
+        word2pos = defaultdict(list)
+        token_counts = defaultdict(int)
+        offsets_for_tokens_premise=defaultdict(list)
+        offsets_for_tokens_hypothesis=defaultdict(list)
+        if premise_id in first_data.keys() and hypothesis_id in first_data.keys():
+          common_dict, p_positions, h_positions, singles = common(premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2)
+          words = list(common_dict.keys())
+          for i, word in enumerate(words):
+            pos = common_dict[word]['pos']
+            word_with_pos = f"{word}:{pos}"
+            premise_pos_list = p_positions[i]
+            hypothesis_pos_list = h_positions[i]
+            for j, (p_pos, h_pos) in enumerate(zip(premise_pos_list, hypothesis_pos_list)):
+                p_start, p_end = p_pos
+                key_prefix_p = f"{p_start}:{p_end}:"
+                h_start, h_end = h_pos
+                key_prefix_h = f"{h_start}:{h_end}:"
+                key = f"{word_with_pos}:{p_start}:{p_end}:{h_start}:{h_end}"
+                premise_data=first_data[premise]
+                hypothesis_data=first_data[hypothesis]
+                matching_key_p = next(
+                    (k for k in premise_data[word_with_pos].keys() if k.startswith(key_prefix_p)),
+                    None
+                    )
+                matching_key_h = next(
+                    (k for k in hypothesis_data[word_with_pos].keys() if k.startswith(key_prefix_h)),
+                    None
+                    )
+                premise_suggestions = premise_data[word_with_pos][matching_key_p]
+                hypothesis_suggestions = hypothesis_data[word_with_pos][matching_key_h]
+                premise_cleaned=filter_candidates(premise_suggestions, singles)
+                hypothesis_cleaned= filter_candidates(hypothesis_suggestions, singles)
+                premise_len_before = len(premise_cleaned)
+                hypothesis_len_before = len(hypothesis_cleaned)
+                if cleaned=='separated':
+                  allowed_pos_tags = pos_filter_map.get(pos_to_mask, set())
+                  premise_cleaned = pos_filtered(premise_cleaned, allowed_pos_tags)
+                  hypothesis_cleaned = pos_filtered(hypothesis_cleaned, allowed_pos_tags)
+                  premise_len_after = len(premise_cleaned)
+                  hypothesis_len_after = len(hypothesis_cleaned)
+                  premise_diff_total += (premise_len_before - premise_len_after)
+                  hypothesis_diff_total += (hypothesis_len_before - hypothesis_len_after)
+                  count += 1
+                premise_fillers= [c.split(":")[0] for c in premise_cleaned]
+                hypothesis_fillers= [c.split(":")[0] for c in hypothesis_cleaned]
+
+                premise_keys = set(premise_fillers)
+                hypothesis_keys = set(hypothesis_fillers)
+                common_words = premise_keys & hypothesis_keys
+                if len(common_words) < number_of_minimal_suggestions:
+                  count_word_not_enough_sol+=1
+                  continue
+
+                premise_probabilities = [float(c.split(":")[1]) for c in premise_cleaned]
+                hypothesis_probabilities = [float(c.split(":")[1]) for c in hypothesis_cleaned]
+                word2fillers[key] = [premise_fillers, hypothesis_fillers]
+                word2probabilities[key] = [premise_probabilities, hypothesis_probabilities]
+                word2pos[key] = [pos, pos]
+        if word2fillers:
+          words = {}
+          for w in word2fillers:
+              words[w] = ranked_overlap(word2fillers[w], word2probabilities[w]).items()
+              words[w] = sorted(words[w], key=lambda x: x[1]["average_rank"])
+          assigned_pos_tags = set()
+          for w, ranked_fillers in words.items():
+              parts = w.split(':')
+              if len(parts) != 6:
+                  print(f"Unexpected key format: {w}")
+                  continue
+              word_only = parts[0]
+              pos=parts[1]
+              premise_start = int(parts[2])
+              premise_end = int(parts[3])
+              hypothesis_start = int(parts[4])
+              hypothesis_end = int(parts[5])
+              expected_variants = 0
+              if isinstance(rank_option, int):
+                  if len(ranked_fillers) >= rank_option:
+                      expected_variants = 1
+              elif isinstance(rank_option, slice):
+                  start, stop, step = rank_option.indices(len(ranked_fillers))
+                  expected_variants = len(range(start, stop, step))
+              sentence_variants = []
+              if label == 'neutral':
+                  expected_generation['neutral'] += expected_variants
+              elif label == 'entailment':
+                  expected_generation['entailment'] += expected_variants
+              elif label == 'contradiction':
+                  expected_generation['contradiction'] += expected_variants
+              try:
+                if isinstance(rank_option, int):
+                    if len(ranked_fillers) < rank_option - 1:
+                        continue
+                    best_ = ranked_fillers[rank_option][0].strip()
+
+                    p_variant = premise_id[:premise_start] + best_ + premise_id[premise_end:]
+                    h_variant = hypothesis_id[:hypothesis_start] + best_ + hypothesis_id[hypothesis_end:]
+
+                    sentence_variants.append((p_variant, h_variant, best_))
+                elif isinstance(rank_option, slice):
+                    for i in range(*rank_option.indices(len(ranked_fillers))):
+                        best_ = ranked_fillers[i][0].strip()
+
+                        p_variant = premise_id[:premise_start] + best_ + premise_id[premise_end:]
+                        h_variant = hypothesis_id[:hypothesis_start] + best_ + hypothesis_id[hypothesis_end:]
+                        sentence_variants.append((p_variant, h_variant, best_))
+                assigned_pos_tags.update(word2pos[w])
+                for idx, (p_variant, h_variant, best_) in enumerate(sentence_variants):
+                  numeric_label = None
+
+                  if label == 'neutral':
+                      numeric_label = 'neutral'
+                      actual_generation['neutral'] += 1
+                  elif label == 'entailment':
+                      numeric_label = 'entailment'
+                      actual_generation['entailment'] += 1
+                  elif label == 'contradiction':
+                      numeric_label = 'contradiction'
+                      actual_generation['contradiction'] += 1
+
+                  processed_entry = {
+                      'id': f"{id}:{word_only}:{pos}:{premise_start}:{premise_end}:{hypothesis_start}:{hypothesis_end}:{best_}",
+                      'premise': p_variant,
+                      'hypothesis': h_variant,
+                      'label': numeric_label
+                  }
+
+                  if id == 'yes':
+                      processed_entry['id'] = f"{id}_{idx}"
+
+                  if sort_by_pos == 'yes':
+                          for pos_tag in assigned_pos_tags:
+                              pos_tagged_data[pos_tag].append(processed_entry)
+                  else:
+                      processed_data.append(processed_entry)
+              except Exception as e:
+                  print("Error processing variants for key", w, ":", e)
+
+    print("\nLabel Counts:")
+    print(f"Neutral: {actual_generation['neutral']} (Expected: {expected_generation['neutral']})")
+    print(f"Entailment: {actual_generation['entailment']} (Expected: {expected_generation['entailment']})")
+    print(f"Contradiction: {actual_generation['contradiction']} (Expected: {expected_generation['contradiction']})\n")
+    print(f"Words with not enough solutions: {count_word_not_enough_sol}")
+    if count > 0:
+        avg_premise_diff = premise_diff_total / count
+        avg_hypothesis_diff = hypothesis_diff_total / count
+        print(f"Average reduction in premise suggestions: {avg_premise_diff:.2f}")
+        print(f"Average reduction in hypothesis suggestions: {avg_hypothesis_diff:.2f}")
+    else:
+        print("No entries processed for reduction after pos tag.")
+    file_counts={output_file:actual_generation, 'sample': labels_sample}
+    if sort_by_pos == 'yes':
+        sorted_data = []
+        for pos, entries in sorted(pos_tagged_data.items()):
+            sorted_data.append({pos: entries})
+        return sorted_data, new_list3
+    with open(output_file, "w") as f:
+        json.dump(processed_data, f)
+    return processed_data, new_list3,file_counts
 
 
 def generate_output_filenames(suggestion_file, number_inflation="10"):
