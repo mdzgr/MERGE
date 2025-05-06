@@ -225,6 +225,7 @@ def flatten_extracted_words(extracted):
   return set()
 
 def filter_snli(dataset, mapping, pos_to_mask, min_common_words, num_sentences_to_process, max_filtered_count=None, annotators_agreement_number=int, length_premise=int, length_hypothesis=int):
+    '''function to extract sentences that adhere to certain criteria, can't be used for combined pos tags'''
     filtered = {}
     count = 0
     dataset_items = list(dataset.items())[:num_sentences_to_process] if num_sentences_to_process else dataset.items()
@@ -474,271 +475,15 @@ def ranked_overlap(list_of_lists, probs):
             "individual_probs": [f"{p:.2e}" for p in probs1]}
     return s_ranks
 
-def process_dataset(first_data, initial_dataset,split, output_file, min_common_words, mapping, ranked_overlap, pos_to_mask, neutral_number, source_1, source_2, entailment_number, contradiction_number, an_no, prem_n, hypo_n, number_of_minimal_suggestions, rank_option='top', sort_by_pos='no', id='no', num_sentences_to_process_dataset: int = None, num_sentences_compliant_criteria: int = None,  debug:str=None):
-    """
-    Matches premise and hypothesis from second_data with first_data, replaces words, applies ranking,
-    transforms the dataset, and optionally groups it by POS tags.
-
-    :first_data: The dataset containing suggestions
-    :second_data: The dataset containing 'id', 'premise', 'hypothesis', and 'label'.
-    :ranked_overlap: The function that ranks words based on probability.
-    :neutral_number: number for neutral label
-    :entailment_number: number for entailment label
-    :contradiction_number: number for contradiction label
-    :rank_option: 'top' for highest-ranked, int for specific rank, slice for multiple replacements.
-    :sort_by_pos: 'yes' to group the dataset by POS tags.
-    :id: 'yes' to process a first_data file with masked suggestions that were recorded as sentence:id
-    :return: Processed dataset with replaced words and transformed labels.
-    """
-
-    processed_data = []
-    pos_tagged_data = defaultdict(list)
-    dataset = initial_dataset[split]
-    SNLI_filtered_2 = filter_snli(dataset, mapping, pos_to_mask, min_common_words,
-                                  num_sentences_to_process_dataset, num_sentences_compliant_criteria, an_no, prem_n, hypo_n)
-    processed_second_data = pos_toks_extract_from_dataset(SNLI_filtered_2, mapping)
-    new_list3, labels_sample = process_unmasked_dataset(processed_second_data, neutral_number, entailment_number, contradiction_number, id='yes')
-    expected_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
 
 
-    actual_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
-    for entry in tqdm(processed_second_data):
-        id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h, label = (entry['id'], entry['premise'], entry['hypothesis'], entry['p_t'],entry['p_p'], entry['h_t'], entry['h_p'], entry['label'] )
 
-
-        if id =='yes':
-          premise_id = f"{premise}:{id}"
-          hypothesis_id = f"{hypothesis}:{id}"
-        else:
-          premise_id = premise
-          hypothesis_id = hypothesis
-
-
-        word2fillers = defaultdict(list)
-        word2probabilities = defaultdict(list)
-        word2pos = defaultdict(list)
-        token_counts = defaultdict(int)
-        offsets_for_tokens_premise=defaultdict(list)
-        offsets_for_tokens_hypothesis=defaultdict(list)
-
-        if premise_id in first_data.keys() and hypothesis_id in first_data.keys():
-
-          common_dict, p_positions, h_positions, singles = common(premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2)
-          if debug=='yes':
-            print('premise', premise)
-            print('hypot', hypothesis)
-            print('common dict', common_dict)
-            print('p_positions', p_positions)
-            print('h_positions', h_positions)
-
-          words = list(common_dict.keys())
-          for i, word in enumerate(words):
-            pos = common_dict[word]['pos']
-            word_with_pos = f"{word}:{pos}"
-            if debug=='yes':
-              print('word_with_pos', word_with_pos)
-            premise_pos_list = p_positions[i]
-            hypothesis_pos_list = h_positions[i]
-
-            for j, (p_pos, h_pos) in enumerate(zip(premise_pos_list, hypothesis_pos_list)):
-                p_start, p_end = p_pos
-                key_prefix_p = f"{p_start}:{p_end}:"
-                h_start, h_end = h_pos
-                key_prefix_h = f"{h_start}:{h_end}:"
-                key = f"{word_with_pos}:{p_start}:{p_end}:{h_start}:{h_end}"
-                premise_data=first_data[premise]
-                hypothesis_data=first_data[hypothesis]
-                if debug=='yes':
-                  print('premise_data', premise_data)
-                  print('hypothesis_data', hypothesis_data)
-
-                matching_key_p = next(
-                    (k for k in premise_data[word_with_pos].keys() if k.startswith(key_prefix_p)),
-                    None
-                    )
-
-                matching_key_h = next(
-                    (k for k in hypothesis_data[word_with_pos].keys() if k.startswith(key_prefix_h)),
-                    None
-                    )
-                premise_suggestions = premise_data[word_with_pos][matching_key_p]
-                hypothesis_suggestions = hypothesis_data[word_with_pos][matching_key_h]
-                if debug=='yes':
-                  print('length of premise suggestions', len(premise_suggestions))
-                  print('length of hypothesis suggestions', len(hypothesis_suggestions))
-                  print('premise_suggestions', premise_suggestions)
-                  print('hypothesis_suggestions', hypothesis_suggestions)
-
-                premise_cleaned=filter_candidates(premise_suggestions, singles)
-                hypothesis_cleaned= filter_candidates(hypothesis_suggestions, singles)
-                if debug=='yes':
-                  print('length of premise cleaned', len(premise_cleaned))
-                  print('length of hypothesis cleaned', len(hypothesis_cleaned) )
-                  print('premise_cleaned', premise_cleaned)
-                  print('hypothesis_cleaned', hypothesis_cleaned)
-
-                premise_fillers= [c.split(":")[0] for c in premise_cleaned]
-                hypothesis_fillers= [c.split(":")[0] for c in hypothesis_cleaned]
-
-                premise_keys = set(premise_fillers)
-                hypothesis_keys = set(hypothesis_fillers)
-                common_words = premise_keys & hypothesis_keys
-                if len(common_words) < number_of_minimal_suggestions:
-                  if debug=='yes':
-                    print(word_with_pos)
-                    print('the id', id)
-                    print('premise', premise)
-                    print('hypo', hypothesis)
-                    print('premise_fillers', premise_fillers)
-                    print('hypothesis_fillers', hypothesis_fillers)
-                  continue
-
-                premise_probabilities = [float(c.split(":")[1]) for c in premise_cleaned]
-                hypothesis_probabilities = [float(c.split(":")[1]) for c in hypothesis_cleaned]
-                if debug=='yes':
-                  print('premise_probabilities', premise_probabilities)
-                  print('hypothesis_probabilities', hypothesis_probabilities)
-                word2fillers[key] = [premise_fillers, hypothesis_fillers]
-                word2probabilities[key] = [premise_probabilities, hypothesis_probabilities]
-                word2pos[key] = [pos, pos]
-
-        if word2fillers:
-          words = {}
-          if debug=='yes':
-            print('word2fillers', word2fillers)
-          for w in word2fillers:
-              words[w] = ranked_overlap(word2fillers[w], word2probabilities[w]).items()
-              words[w] = sorted(words[w], key=lambda x: x[1]["average_rank"])
-
-          if debug=='yes':
-            print('the words',words)
-          assigned_pos_tags = set()
-
-          for w, ranked_fillers in words.items():
-              if debug=='yes':
-                print('the word entry', w)
-                print('the ranked fillers', ranked_fillers)
-                print('len of rank', len(ranked_fillers))
-
-              parts = w.split(':')
-              if len(parts) != 6:
-                  print(f"Unexpected key format: {w}")
-                  continue
-              word_only = parts[0]
-              pos=parts[1]
-              premise_start = int(parts[2])
-              premise_end = int(parts[3])
-              hypothesis_start = int(parts[4])
-              hypothesis_end = int(parts[5])
-              if debug=='yes':
-                print('word_only',word_only)
-                print('premise_start',premise_start)
-                print('premise_end',premise_end)
-                print('hypothesis_start',hypothesis_start)
-                print('hypothesis_end',hypothesis_end)
-              expected_variants = 0
-
-              if isinstance(rank_option, int):
-                  if len(ranked_fillers) >= rank_option:
-                      expected_variants = 1
-              elif isinstance(rank_option, slice):
-                  start, stop, step = rank_option.indices(len(ranked_fillers))
-                  expected_variants = len(range(start, stop, step))
-              sentence_variants = []
-              if label == 'neutral':
-                  expected_generation['neutral'] += expected_variants
-              elif label == 'entailment':
-                  expected_generation['entailment'] += expected_variants
-              elif label == 'contradiction':
-                  expected_generation['contradiction'] += expected_variants
-
-
-              if debug=='yes':
-                print('the premise', premise_id)
-                print('the hypothesis', hypothesis_id)
-              try:
-                if isinstance(rank_option, int):
-                    if len(ranked_fillers) < rank_option - 1:
-                        continue
-                    best_ = ranked_fillers[rank_option][0].strip()
-
-                    p_variant = premise_id[:premise_start] + best_ + premise_id[premise_end:]
-                    if debug=='yes':
-                      print('p_variant',p_variant)
-                    h_variant = hypothesis_id[:hypothesis_start] + best_ + hypothesis_id[hypothesis_end:]
-                    if debug=='yes':
-                      print('h_variant', h_variant)
-                    sentence_variants.append((p_variant, h_variant, best_))
-                    if debug=='yes':
-                      print('sentence_var', sentence_variants)
-
-                elif isinstance(rank_option, slice):
-                    for i in range(*rank_option.indices(len(ranked_fillers))):
-                        best_ = ranked_fillers[i][0].strip()
-                        p_variant = premise_id[:premise_start] + best_ + premise_id[premise_end:]
-                        if debug=='yes':
-                          print('p_variant',p_variant)
-                        h_variant = hypothesis_id[:hypothesis_start] + best_ + hypothesis_id[hypothesis_end:]
-                        sentence_variants.append((p_variant, h_variant, best_))
-                        if debug=='yes':
-                          print('h_variant', h_variant)
-                          print('sentence_var', sentence_variants)
-                if debug=='yes':
-                  print('all sentence variants', sentence_variants)
-                assigned_pos_tags.update(word2pos[w])
-                for idx, (p_variant, h_variant, best_) in enumerate(sentence_variants):
-                  numeric_label = None
-
-                  if label == 'neutral':
-                      numeric_label = 'neutral'
-                      actual_generation['neutral'] += 1
-                  elif label == 'entailment':
-                      numeric_label = 'entailment'
-                      actual_generation['entailment'] += 1
-                  elif label == 'contradiction':
-                      numeric_label = 'contradiction'
-                      actual_generation['contradiction'] += 1
-
-                  processed_entry = {
-                      'id': f"{id}:{word_only}:{pos}:{premise_start}:{premise_end}:{hypothesis_start}:{hypothesis_end}:{best_}",
-                      'premise': p_variant,
-                      'hypothesis': h_variant,
-                      'label': numeric_label
-                  }
-
-                  if id == 'yes':
-                      processed_entry['id'] = f"{id}_{idx}"
-
-                  if sort_by_pos == 'yes':
-                          for pos_tag in assigned_pos_tags:
-                              pos_tagged_data[pos_tag].append(processed_entry)
-                  else:
-                      processed_data.append(processed_entry)
-              except Exception as e:
-                  print("Error processing variants for key", w, ":", e)
-
-    print("\nLabel Counts:")
-    print(f"Neutral: {actual_generation['neutral']} (Expected: {expected_generation['neutral']})")
-    print(f"Entailment: {actual_generation['entailment']} (Expected: {expected_generation['entailment']})")
-    print(f"Contradiction: {actual_generation['contradiction']} (Expected: {expected_generation['contradiction']})\n")
-
-    file_counts={output_file:actual_generation, 'sample': labels_sample}
-    if sort_by_pos == 'yes':
-        sorted_data = []
-        for pos, entries in sorted(pos_tagged_data.items()):
-            sorted_data.append({pos: entries})
-        return sorted_data, new_list3
-    if debug=='yes':
-      print('processed_data', processed_data)
-    with open(output_file, "w") as f:
-        json.dump(processed_data, f)
-    return processed_data, new_list3,file_counts
 
 def generate_output_filenames(suggestion_file, number_inflation="10"):
     """
     Given a suggestion file path like:
       /.../robert-base-cased.1.noun.200.test.json
-    extract parts of the name and automatically generate the output file names.
+    extract parts of the name and automatically generate the output file names required for the processed dataset
 
     Returns:
         output_processed_dataset, output_initial, output_all_inflated, output_all_sample, pos_to_mask
@@ -813,7 +558,16 @@ def map_labels_to_numbers(dataset, model_name):
 
 def predictions_nli(model_name, data_json_file, batch_size_number, device_g_c, batch_function, tok_model_function):
     """
-    takes model_name from HUGface, the dataset of inflated procssed dataset, and a batch size
+    calculates predictions for a dataset
+
+    args:
+    model_name: model_name
+    data_json_file: json file with stimuli for predictions
+    batch_size_number: batch number
+    device_g_c:  cuda or cpu
+    batch_function: takes function from assign.tools to eval in batches
+    tok_model_function: tokenizer function from assign tools
+    
     outputs: a json file with the input file name, model name and its predictions
     ***Note json file has to contain premise and hypothesis
     """
@@ -876,7 +630,22 @@ def merge_data_and_predictions(data_json_file, predictions_file, model_name):
     return merged, output_filename
 
 def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thresholds_list:list, id_type: int, calculate_per_label=False):
-  with open(json_filepath, "r") as f:
+  '''calculates various metrics: SA, PA Acc, Consistency (first, average-based) separately (or not) per label
+  args:
+      json_filepath: file with stimuli and predictions
+      dictionary_result: dict where to store results
+      type_evaluation: the reference taken in eval has 3 poss values:
+              0 = gold label comparison (for SA and PA)
+              1 = first-prediction (consistency first-choice based)
+              2 = avr prediction label (consistency average-base)
+      thresholds_list: list of threshold levels for the metrics
+      id_type: what type of id the dataset has (only original id from SNLI, or one that encodes info about the pos tag replaced, position etc.)
+              values are used for:
+              0 = seed datasets  e.g. 6160193920.jpg#4r1e
+              1 = inflated datasets, e.g. 6160193920.jpg#4r1e:very:RB:49:53:13:17:really
+      calculate_per_label: if specified it will calculate PA for every label separately
+  '''
+    with open(json_filepath, "r") as f:
         data = json.load(f)
   model=data[0]['model']
   input_file=data[0]['input_file']
@@ -942,8 +711,8 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
                 else:
                     per_label_accuracies[label][threshold] = None
 
-  if model not in dictionary_result:
-      dictionary_result[model] = []
+  if model not in dictionary_results:
+      dictionary_results[model] = []
   key_name = (
             "pattern_accuracy" if type_evaluation == 0 else
             "consistency_accuracy_first" if type_evaluation == 1 else
@@ -959,7 +728,7 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
   if calculate_per_label:
       result_dict["per_label_accuracies"] = per_label_accuracies
 
-  dictionary_result[model].append(result_dict)
+  dictionary_results[model].append(result_dict)
 
   print("SAMPLE Accuracy:", normal_accuracy)
   for threshold, acc in nested_accuracies.items():
@@ -975,7 +744,7 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
   return_dict = {
         "normal_accuracy": normal_accuracy,
         "nested_accuracies": nested_accuracies,
-        "dictionary_results": dictionary_result
+        "dictionary_results": dictionary_results
     }
 
   return return_dict
@@ -1000,12 +769,10 @@ def parse_input_file(input_file):
 
 def build_ascii_table(dictionary_results, type_eval, threshold_1:list, readme_filepath="README.txt", threshold="all"):
     """
-    Builds an ASCII table with columns:
+    prints and saves ASCII table with columns:
     model_tested, generated_with, pos, type_dataset, no. inflation, sample accuracy,
     and pattern accuracy (either one column if a specific threshold is provided,
     or five columns if threshold=="all").
-
-    The table is printed and saved to the specified readme_filepath.
     """
     if threshold == "all":
         header = (
@@ -1061,6 +828,7 @@ def build_ascii_table(dictionary_results, type_eval, threshold_1:list, readme_fi
     return table_str
 
 def filter_entries_by_id(input_file1, input_file2, output_file="filtered_entries.json", missing_output_file="missing_entries.json"):
+    '''compares 2 files and splits them into common and missing entries, creating 2 files'''
     with open(input_file1, 'r') as f:
         entries = json.load(f)
 
@@ -1079,13 +847,16 @@ def filter_entries_by_id(input_file1, input_file2, output_file="filtered_entries
     with open(missing_output_file, 'w') as f:
         json.dump(missing_entries, f, indent=2)
 
-    print(f"✔ Found {len(filtered_entries)} matching entries from {input_file1}. Saved to {output_file}")
-    print(f"❗ Found {len(missing_entries)} missing entries from {input_file2}. Saved to {missing_output_file}")
+    print(f"Found {len(filtered_entries)} matching entries from {input_file1}. Saved to {output_file}")
+    print(f"Found {len(missing_entries)} missing entries from {input_file2}. Saved to {missing_output_file}")
 
     return filtered_entries, missing_entries
 
 
 def batch_filter_entries_colab():
+    '''takes files that have predictions from the current directory named *_merged, and uses anpther function to split them into 
+    already predicted, and to predict sentences by comparing them with the 
+    sentences that need new predictions'''
     merged_files = glob.glob("*_merged.json")
 
     for merged_file in merged_files:
@@ -1106,6 +877,8 @@ def batch_filter_entries_colab():
         )
 
 def combine_predicted_and_to_predict():
+    '''function that combines previous prediction files with new prediction files, used in
+    evaluation when some data, i.e. predicitions, already exist'''
     predicted_files = glob.glob("*_predicted_first.json")
 
     for predicted_file in predicted_files:
@@ -1128,6 +901,7 @@ def combine_predicted_and_to_predict():
 
 
 def filter_predictions_by_gold_ids(base_file, ref_file1, ref_file2, ref_file3, ref_file4):
+    '''fucntion used to obtain a file with all pos tags inflated'''
     ref_files = [ref_file1, ref_file2, ref_file3, ref_file4]
     matching_entries = []
     seen_ids = set()
@@ -1148,6 +922,7 @@ def filter_predictions_by_gold_ids(base_file, ref_file1, ref_file2, ref_file3, r
     return matching_entries
 
 def file_comparison(input_file1, input_file2):
+    '''compares 2 files and outputs how many entries are the same, and how many are diff'''
     with open(input_file1, 'r') as f:
         entries = json.load(f)
 
@@ -1164,5 +939,3 @@ def file_comparison(input_file1, input_file2):
     print(f"Found {len(missing_entries)} missing entries from {input_file2}.")
 
     return filtered_entries, missing_entries
-
-
