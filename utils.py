@@ -22,6 +22,7 @@ from google.colab import files
 import torch
 import torch.nn.functional as F
 import evaluate
+import glob
 
 
 
@@ -1146,5 +1147,22 @@ def filter_predictions_by_gold_ids(base_file, ref_file1, ref_file2, ref_file3, r
 
     return matching_entries
 
+def file_comparison(input_file1, input_file2):
+    with open(input_file1, 'r') as f:
+        entries = json.load(f)
+
+    with open(input_file2, 'r') as f:
+        reference_entries = json.load(f)
+
+    entry_ids = {entry['id'] for entry in entries}
+    reference_ids = {entry['id'] for entry in reference_entries}
+
+    filtered_entries = [entry for entry in entries if entry['id'] in reference_ids]
+    missing_entries = [entry for entry in reference_entries if entry['id'] not in entry_ids]
+
+    print(f"Found {len(filtered_entries)} matching entries from {input_file1}.")
+    print(f"Found {len(missing_entries)} missing entries from {input_file2}.")
+
+    return filtered_entries, missing_entries
 
 
