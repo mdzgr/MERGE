@@ -476,14 +476,14 @@ def ranked_overlap(list_of_lists, probs):
     return s_ranks
 
 
-def pos_filtered(candidates, allowed_tags):
+def pos_filtered(candidates, allowed_tags, nlp):
     '''takes a list of suggestions from models and classifies their pos tags with spacy'''
     words = [c.split(":")[0] for c in candidates]
     tagged = list(nlp.pipe(words))
     return [c for c, doc in zip(candidates, tagged)
         if doc[0].tag_ in allowed_tags]
 
-def process_dataset(first_data, optional_dataset, initial_dataset,split, output_file, min_common_words, mapping, ranked_overlap, pos_to_mask, neutral_number, source_1, source_2, entailment_number, contradiction_number, an_no, prem_n, hypo_n, number_of_minimal_suggestions, cleaned:str=None, rank_option='top', sort_by_pos='no', id='no', num_sentences_to_process_dataset: int = None, num_sentences_compliant_criteria: int = None,  debug:str=None):
+def process_dataset(first_data, optional_dataset, initial_dataset,split, output_file, min_common_words, mapping, ranked_overlap, pos_to_mask, neutral_number, source_1, source_2, entailment_number, contradiction_number, an_no, prem_n, hypo_n, number_of_minimal_suggestions, cleaned:str=None, rank_option='top', sort_by_pos='no', id='no', num_sentences_to_process_dataset: int = None, num_sentences_compliant_criteria: int = None,  debug:str=None, nlp):
     """
     Matches premise and hypothesis from second_data with first_data, replaces words, applies ranking,
     transforms the dataset, and optionally groups it by POS tags.
@@ -588,8 +588,8 @@ def process_dataset(first_data, optional_dataset, initial_dataset,split, output_
                 hypothesis_len_before = len(hypothesis_cleaned)
                 if cleaned=='separated':
                   allowed_pos_tags = pos_filter_map.get(pos_to_mask, set())
-                  premise_cleaned = pos_filtered(premise_cleaned, allowed_pos_tags)
-                  hypothesis_cleaned = pos_filtered(hypothesis_cleaned, allowed_pos_tags)
+                  premise_cleaned = pos_filtered(premise_cleaned, allowed_pos_tags, nlp)
+                  hypothesis_cleaned = pos_filtered(hypothesis_cleaned, allowed_pos_tags, nlp)
                   premise_len_after = len(premise_cleaned)
                   hypothesis_len_after = len(hypothesis_cleaned)
                   premise_diff_total += (premise_len_before - premise_len_after)
