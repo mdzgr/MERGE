@@ -2164,3 +2164,63 @@ def file_comparison(input_file1, input_file2):
     print(f"Found {len(missing_entries)} missing entries from {input_file2}.")
 
     return filtered_entries, missing_entries
+
+def get_base_ids_pos(filepath):
+    """Reads a JSON file and extracts the first part of the 'id' for each entry."""
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error reading file {filepath}: {e}")
+        return set()
+
+    base_ids = set()
+    for entry in data:
+        if 'id' in entry:
+            parts = entry['id'].split(':')
+            if parts:
+                base_ids.add(parts[0])
+    return base_ids
+def get_base_ids_2pos(filepath):
+    """Reads a JSON file and extracts the first part of the 'id' for each entry."""
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error reading file {filepath}: {e}")
+        return set()
+
+    base_ids = set()
+    for entry in data:
+        if 'id' in entry:
+            parts = entry['id'].split(':')
+            if parts:
+                base_ids.add(parts[0])
+    return base_ids
+
+def filter_dataset_by_ids_pos(dataset_path, id_set):
+    """
+    Filters a dataset (JSON file) to include only entries whose base ID is in the provided set.
+
+    Args:
+        dataset_path (str): Path to the input JSON dataset file.
+        id_set (set): A set of base IDs to keep.
+
+    Returns:
+        list: A list containing the filtered dataset entries.
+              Returns an empty list if the file cannot be read or is empty.
+    """
+    try:
+        with open(dataset_path, 'r') as f:
+            dataset_entries = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error loading dataset from {dataset_path}: {e}")
+        return []
+
+    filtered_dataset = []
+    for entry in dataset_entries:
+        if 'id' in entry:
+            parts = entry['id'].split(':')
+            if parts and parts[0] in id_set:
+                filtered_dataset.append(entry)
+    return filtered_dataset
