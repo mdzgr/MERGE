@@ -1753,7 +1753,7 @@ def process_dataset(data_with_suggestions,
                             pos_tagged_data[pos_tag].append(processed_entry)
                 else:
                     processed_data.append(processed_entry)
-                ###### CHECK 4
+                ###### use str(value)
     statistics_kwargs = {
         'actual_generation': actual_generation,
         'expected_generation': expected_generation,
