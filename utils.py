@@ -758,8 +758,6 @@ def write_statistics_based_on_parameters(output_file, prob, calculate_average_po
     return results
 
 
-#
-
 
 def save_dataset_to_json(dataset, directory, filename):
     """
@@ -1554,8 +1552,8 @@ def process_dataset(data_with_suggestions,
     for entry in tqdm(processed_second_data[:100]):
 
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h, label = (entry['id'], entry['premise'], entry['hypothesis'], entry['p_t'],entry['p_p'], entry['h_t'], entry['h_p'], entry['label'] )
-        if id != '2876232980.jpg#0r1e':
-          continue
+        # if id != '2876232980.jpg#0r1e':
+        #   continue
         premise_id = premise
         hypothesis_id = hypothesis
         word2fillers, word2probabilities, word2pos, _, _, _, positions = [defaultdict(list), defaultdict(list), defaultdict(int), defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)]
