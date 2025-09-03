@@ -954,7 +954,7 @@ def generate_mini_datasets(dataset_file_paths, log_for, num_samples=10, sample_s
     print(f"\nAll processing done. Logs (including seed info) saved in {log_path}")
     return
 
-    def get_base_ids_flat(filepath):
+def get_base_ids_flat(filepath):
     """gets base (original id) for a flat JSON dataset."""
     try:
         with open(filepath, 'r') as f:
