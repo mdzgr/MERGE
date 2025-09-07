@@ -1076,4 +1076,73 @@ def get_base_ids(filepath):
 
 def extract_base_id(full_id):
     return full_id.split("#")[0]
+
+def merge_and_analyze_from_results(
+    processed_results: dict,
+    *,
+    models: list[str],
+    pos_tag: str,
+    min_count: int,
+    name: str | None = None,
+    opposite: bool = True,
+    label_for_shared_suggestions: str = "general",
+):
+
+    pairs_models_datasets = []
+    missing = []
+    for model in models:
+        key = f"{model}_{pos_tag}"
+        # print('the key for the model and the pos tag', key)
+        data = processed_results.get(key, [])
+        # print('data', data)
+        if data:
+            # print('the model that will be printed as well', model)
+            pairs_models_datasets.append((data, model))  # (dataset, source label = model)
+        else:
+            missing.append(key)
+
+    if len(pairs_models_datasets) < 2:
+        # print(len(pairs_models_datasets))
+        raise ValueError(
+            f"Need at least two models' suggestions  for pos_tag='{pos_tag}'. ")
+
+    (dataset1, source1), (dataset2, source2), *others = pairs_models_datasets
+    return merge_and_analyze_datasets(
+        dataset1, source1,
+        dataset2, source2,
+        min_count,
+        name=name,
+        opposite=opposite,
+        others=others,
+        label_for_shared_suggestions=label_for_shared_suggestions,
+    )
+
+def generate_output_filenames(suggestion_file, number_inflation="10", models_dictionary, pos_dicitonary):
+    #not double-checked
+    """
+    IN:
+      /.../robert-base-cased.1.noun.200.test.json
+    extract parts of the name and automatically generate the output file names required for the processed dataset
+
+    out: output_processed_dataset, output_initial, output_all_inflated, output_all_sample, pos_to_mask
+    """
+    basename = os.path.basename(suggestion_file)
+    parts = basename.split('.')
+
+    if len(parts) < 6:
+        raise ValueError("Filename does not follow expected naming convention.")
+
+    model_tested, model_number, pos_full, size, split_str = parts[0], parts[1], parts[2], parts[3], parts[4][:2]
+    model_name=models_dictionary.get(model_tested)
+    pos_abbrev = pos_dicitonary.get(pos_full.lower(), pos_full.lower())
+
+    output_processed_dataset = f"{model_name}.{model_number}.{pos_abbrev}.{size}.{split_str}.inf.{number_inflation}.json"
+    output_initial = f"{model_name}.{model_number}.{pos_abbrev}.{size}.{split_str}.samp.{number_inflation}.json"
+    output_all_inflated = f"{model_name}.{model_number}.all.{size}.{split_str}.inf.{number_inflation}.json"
+    output_all_sample = f"{model_name}.{model_number}.all.{size}.{split_str}.samp.{number_inflation}.json"
+
+    # Use the full pos tag as pos_to_mask if that's what you need.
+    pos_to_mask = pos_full
+
+    return output_processed_dataset, output_initial, output_all_inflated, output_all_sample, pos_to_mask
 #functions for processing suggestions to form variant dataset
