@@ -1,0 +1,27 @@
+def verify_dataset_replacements(dataset, initial_dict):
+
+    '''replaces the suggestion with the original word and looks for that in the intial dicitonary
+    sanity check for replacement'''
+    not_found_in_original_dictionary = 0
+    for item in dataset:
+        full_id = item["id"]
+        sentence_id, word, pos, _,_,_,_,replacement_word,_ = full_id.split(":")
+        key = f"{word}:{pos}"
+        original_word = word
+        premise = item["premise"]
+        hypothesis = item["hypothesis"]
+        pattern = re.compile(rf"\b{re.escape(replacement_word)}(?=\b|-)")
+        restored_premise, count_p = pattern.subn(original_word, premise)
+        restored_hypothesis, count_h = pattern.subn(original_word, hypothesis)
+
+        if count_p == 0 and count_h == 0:
+            raise ValueError(
+                f"No replacements made for id={full_id!r} "
+                f"(replacement_word={replacement_word!r})"
+            ) # if no replacements were done in premise/hyptohesis
+
+        if (restored_premise, restored_hypothesis) not in initial_dict:
+            not_found_in_original_dictionary += 1
+
+    print(not_found_in_original_dictionary)
+    return not_found_in_original_dictionary
