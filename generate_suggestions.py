@@ -92,8 +92,7 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
     """
     #not modified for optimality
     model_architecture = model.config.architectures[0].lower()
-    mask_token = '[MASK]' if 'bert' in model_architecture and 'roberta' not in model_architecture else '<mask>'
-
+    mask_token = "<mask>" if model_architecture == "roberta" else "[MASK]"
     suggestions, all_tuples = {},[]
     for w in mask_offsets:
       if len(w)>1:
