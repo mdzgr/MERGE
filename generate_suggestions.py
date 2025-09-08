@@ -245,7 +245,6 @@ def pos_toks_extract_from_dataset(list_filtered, mapping):
     #the code groups first by last letter and then againcombines it bc before i was making sure there are all 3 letters there, but now it is harmless and
   filtered_list_1 = []
   grouped_problems = defaultdict(dict)
-  # print(list_filtered)
   for k, p in list_filtered.items(): ########this is not necessary but i will leave it as it is for now
       base_id = k[:-1]
       version = k[-1]
