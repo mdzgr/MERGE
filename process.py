@@ -1117,7 +1117,7 @@ def merge_and_analyze_from_results(
         label_for_shared_suggestions=label_for_shared_suggestions,
     )
 
-def generate_output_filenames(suggestion_file, , models_dictionary, pos_dicitonary, number_inflation="10"):
+def generate_output_filenames(suggestion_file, models_dictionary, pos_dicitonary, number_inflation="10"):
     #not double-checked
     """
     IN:
