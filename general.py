@@ -1,4 +1,4 @@
-
+import json, os
 def file_comparison(input_file1, input_file2):
     '''compares 2 files and outputs how many entries are the same, and how many are diff'''
     with open(input_file1, 'r') as f:
