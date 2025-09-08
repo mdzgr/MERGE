@@ -188,8 +188,7 @@ def flatten_extracted_words(extracted):
 
 def filter_snli(dataset, mapping, pos_to_mask, min_common_words, num_sentences_to_process, max_filtered_count=None, annotators_agreement_number=int, length_premise=int, length_hypothesis=int):
     '''function to extract sentences that adhere to certain criteria, can't be used for combined pos tags'''
-    filtered = {}
-    count = 0
+    filtered, count = {}, 0
     dataset_items = list(dataset.items())[:num_sentences_to_process] if num_sentences_to_process else dataset.items()
     for k, p in dataset_items:
         # print(p)
