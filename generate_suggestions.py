@@ -1,28 +1,20 @@
-import os
-import sys
-import importlib
-import glob
-import evaluate
-import re
-import nltk
-import json
-import pickle
-import random
-import svgling
-import pandas as pd
-import spacy
-from os import path as op
-from collections import Counter, defaultdict
-from nltk.metrics.agreement import AnnotationTask as AnnoT
-from nltk.tree import Tree
+from transformers import pipeline, AutoTokenizer, AutoModelForMaskedLM, AutoModelForSequenceClassification, TrainingArguments, Trainer
+from typing import Dict, Callable, List, Tuple, List, Any
+import nltk, re, os, json, string, torch, glob, sys, torch, random, numpy as np, pandas as pd
+from nltk import pos_tag, word_tokenize
 from tqdm import tqdm
-from nltk import jaccard_distance
+from collections import defaultdict, Counter
+from datasets import load_dataset
+from typing import Dict,Tuple
+import datasets, evaluate
+from evaluate import evaluator
 from google.colab import files
-from tqdm import tqdm
-from tqdm.notebook import tqdm
-from transformers import pipeline
-from typing import Dict, Callable, List, Tuple
-from tqdm.notebook import tqdm
+import torch.nn.functional as F
+from contextlib import redirect_stdout
+from wordfreq import zipf_frequency
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from statistics import mean
 
 def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
   #not modified for optimality
