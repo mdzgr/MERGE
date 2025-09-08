@@ -250,7 +250,6 @@ def pos_toks_extract_from_dataset(list_filtered, mapping):
       base_id = k[:-1]
       version = k[-1]
       grouped_problems[base_id][version] = p
-  print('the grouped problems',grouped_problems)
   for base_id, versions in grouped_problems.items():
       for version, p in versions.items():
         filtered_list_1.append({
