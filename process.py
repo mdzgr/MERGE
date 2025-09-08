@@ -508,7 +508,7 @@ def merge_and_analyze_datasets(dataset1, source1,
       result = full_id.split(':')[0]  # everything except origin and model
       return result
 
-    def shared_label(num_models: int) -> str:
+    def shared_label(num_models: int):
         if label_for_shared_suggestions.lower() == "fine-grained":
             return f"shared-{num_models}"
         return "both"
