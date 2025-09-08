@@ -915,7 +915,7 @@ def process_dataset(data_with_suggestions,
           assigned_pos_tags = set()
           for w, ranked_fillers in words.items():
                                                                               #Ranked fillers for church:NN:5:11:4:10: [('house', {'average_rank': 0.5, 'ranks': [1], 'average_prob': '1.08e-01', 'individual_probs': ['1.08e-01']}), ('building', {'average_rank': 0.0, 'ranks': [0], 'average_prob': '1.52e-01', 'individual_probs': ['1.52e-01']})]
-                    parts = w.split(':')                                    # split the origin.word
+              parts = w.split(':')                                    # split the origin.word
               if len(parts) != 6:
                   print(f"Unexpected key format: {w}")
                   continue
@@ -1117,7 +1117,7 @@ def merge_and_analyze_from_results(
         label_for_shared_suggestions=label_for_shared_suggestions,
     )
 
-def generate_output_filenames(suggestion_file, number_inflation="10", models_dictionary, pos_dicitonary):
+def generate_output_filenames(suggestion_file, , models_dictionary, pos_dicitonary, number_inflation="10"):
     #not double-checked
     """
     IN:
