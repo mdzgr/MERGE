@@ -1,7 +1,7 @@
 from collections import Counter, defaultdict
 from wordfreq import zipf_frequency
 from contextlib import redirect_stdout
-from generate_suggestions import filter_snli, pos_toks_extract_from_dataset, process_unmasked_dataset, common
+from MERGE.generate_suggestions import filter_snli, pos_toks_extract_from_dataset, process_unmasked_dataset, common
 import string, json, os, re, random
 
 def filter_candidates(candidates, all_singles=None, excluded_words=None):
