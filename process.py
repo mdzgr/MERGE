@@ -567,7 +567,9 @@ def merge_and_analyze_datasets(dataset1, source1,
         all_pairs.extend(others)
     all_ids,  word_pos_lookup= set(), {}
     for dataset, _ in all_pairs:
-        all_ids.add(item['id'] for item in dataset)#open the dataset and add the ids to all ids
+    # add every id string into the set
+      all_ids.update(item['id'] for item in dataset)
+                                  #open the dataset and add the ids to all ids
                                   #    [D2 Item 1] FULL ITEM: {'id': '2677109430.jpg#1r1n:church:NN:5:11:4:10:roof:h:roberta', 'premise': 'This roof choir sings to the masses as they sing joyous songs from the book at a roof.', 'hypothesis': 'The roof has cracks in the ceiling.', 'label': 'neutral'}
                                   # -> Added ID: 2677109430.jpg#1r1n:church:NN:5:11:4:10:roof:h:roberta
                                   # -> Unique ID count so far: 3
