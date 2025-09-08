@@ -70,10 +70,3 @@ def load_data(json_input):
   else:
       raise ValueError("Input must be a filepath or a list of dictionaries.")
   return data
-
-
-def merge_helper(a: dict, b: dict):
-    """Return a shallow merge of two dicts (b overwrites a)."""
-    out = a.copy()
-    out.update(b)
-    return out
