@@ -734,8 +734,7 @@ def process_matching_keys(data, sentence, word_with_pos, all_matching_keys,
             if (prob1 := float(c.split(":")[1])) < original_prob:
                 print(f"DEBUG: Found problematic entry: {c}, prob={prob1}, threshold={original_prob}")
       total_remaining_suggestions += len(cleaned_list); total_words += 1; per_key_cleaned_lists.append(cleaned_list); cleaned_suggestions.extend(cleaned_list)
-
-  num_sentences += 1 if num_sentences_binary =='yes' and pos_tag_filtering == 'yes' else 0 # add 1 to count
+  
   if len(all_matching_keys) == 1:
     intersected_suggestions = cleaned_suggestions
   elif len(all_matching_keys) > 1:
