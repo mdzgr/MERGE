@@ -277,6 +277,66 @@ def common(sentence1, sentence2, pos_sent_1, pos_sent_2, toks_sent_1, toks_sent_
     mask_positions_2 = [extracted_2[token]["positions"] for token in common_tokens]
     return common_dict, mask_positions_1, mask_positions_2, all_nouns_singles
 
+
+def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
+                         model, tokenizer, all_single_words, common_tokens, suggestion_n=50) -> Dict[Tuple[int,int], List[str]]:
+                             #not double-checked
+    """ mask_offsets is a list of integer pairs that mark the part of teh string input taht needs to be masked.
+        It is a list because in general it might be needed to mask several parts of the input string.
+        Returns a dictionary with character offsets as keys and a list of ranked suggestions as values.
+    """
+    model_architecture = getattr(model.config, "architectures", None)
+    model_architecture = model_architecture[0].lower() if model_architecture else model.config.model_type.lower()
+    mask_token = "<mask>" if model_architecture == "roberta" else "[MASK]"
+    suggestions, all_tuples=  {}, []
+    for w in mask_offsets:
+      if len(w)>1:
+        for i in w:
+          all_tuples.append(i)
+      else:
+        all_tuples.append(w[0])
+    mask_offsets=all_tuples
+    for i, j in mask_offsets:
+      masked_token_orig = input_str[i:j]
+      offset_key = str(i)+':'+str(j)
+      if masked_token_orig in common_tokens:
+          pos_tag = common_tokens[masked_token_orig].get('pos', 'UNK')
+      else:
+          pos_tag = "UNK"
+      candidate_list = []
+      masked_input = input_str[:i] + f'{mask_token}' + input_str[j:]
+      if masked_input.endswith(mask_token):
+          masked_input += '.'
+      if mask_token == '<mask>' and not masked_input.startswith('<mask>'):
+        masked_token_orig=' '+masked_token_orig
+        if masked_input.startswith('<mask>'):
+          print('the mask that is fed to the model for probability when it is the first tokem', masked_token_orig)
+      generated, probability_masked_word = generate_mask_predictions(model, tokenizer, masked_input, mask_token, masked_token_orig, suggestion_n)
+      if mask_token == '<mask>' and not masked_input.startswith('<mask>'):
+        masked_token_orig=masked_token_orig.strip()
+      token_key=f"{masked_token_orig}:{pos_tag}"
+      if probability_masked_word=='None':
+        offset_key = f"{offset_key}:{probability_masked_word}"
+      else:
+        offset_key = f"{offset_key}:{probability_masked_word:.2e}"
+      for k in generated:
+          token = k['token_str'].lstrip()
+          token_1=token.strip('Ġ')
+          candidate_list.append(f"{token_1}:{k['score']:.2e}")
+      if len(candidate_list) != suggestion_n:
+          print(f"\nWarning: Expected {suggestion_n} suggestions but got {len(candidate_list)}")
+          print(f"Input string: {input_str}")
+      if token_key not in suggestions:
+          suggestions[token_key] = {}
+      if offset_key not in suggestions[token_key]:
+        suggestions[token_key][offset_key] = {}
+        suggestions[token_key][offset_key] = candidate_list
+      else:
+        suggestions[token_key][offset_key].extend(candidate_list)
+    return suggestions
+
+
+#already_exsiting_words> exclude_words_part_of_p_and_h
 def create_filler_file(
     model_name: str,
     dataset: pd.DataFrame,
@@ -287,7 +347,7 @@ def create_filler_file(
     source_1: str,
     source_2: str,
     mapping,
-    already_exsiting_words: str,
+    exclude_words_part_of_p_and_h: str,
     no_neutral,
     no_contradiction,
     no_ential,
@@ -296,6 +356,8 @@ def create_filler_file(
     number_words_hypothesis,
     num_sentences_to_process_dataset: int = None,
     num_sentences_compliant_criteria: int = None,
+    mock_test: bool = False,
+    add_id_to_dataset: bool = False,
     output_file: str = None,
 ) -> List[Dict]:
 #not double-checked
@@ -311,10 +373,11 @@ def create_filler_file(
         source_1: name of the first sentence in dataset
         source_2: name of the second sentence in dataset
         mapping: mapping function
-        already_exsiting_words: if we want to exclude or not 3xclude alreadye xisting words
+        exclude_words_part_of_p_and_h: if we want to exclude or not 3xclude alreadye xisting words
         num_sentences_to_process_dataset : int /// The number of sentences to process from the dataset.
         num_sentences_compliant_criteria : int // argument that sopecifies after how many sentences compliant to the crteria to select
-        output_format : str // The format of the output file
+        mock_test: if yes it will do the generation for one sentence that has a word with 2 occurances
+        add_id_to_dataset: if yes it will add an id to the dataset
         output_file : str /// file name where the masked dataset will be saved
         #returns the list of processed sentences with ids and a sepearte file with the suggestions
     """
@@ -327,14 +390,16 @@ def create_filler_file(
                                   num_sentences_to_process_dataset, num_sentences_compliant_criteria, number_of_labels, number_words_premise, number_words_hypothesis)
 
     filtered_list_1 = pos_toks_extract_from_dataset(SNLI_filtered_2, mapping)
-    new_list3, lab = process_unmasked_dataset(filtered_list_1, no_neutral, no_ential, no_contradiction, id='yes')
+    seed_dataset, lab = process_unmasked_dataset(filtered_list_1, no_neutral, no_ential, no_contradiction, id=add_id_to_dataset)
     model = AutoModelForMaskedLM.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     results_dict = {}
     for p in tqdm(filtered_list_1):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h = (p['id'], p['premise'], p['hypothesis'], p['p_t'], p['p_p'], p['h_t'], p['h_p'] )
+        if mock_test and id != "3827316480.jpg#0r1e": 
+          continue
         common_tokens_dictionary, p_off, h_off, all_nouns_singles = common(
-            premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2, already_exsiting_words
+            premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2, exclude_words_part_of_p_and_h
         )
         p_off_filler = suggest_mask_fillers(premise, p_off, model, tokenizer, all_nouns_singles, common_tokens_dictionary, num_filler_suggestions)
         if p_off_filler:
@@ -350,4 +415,4 @@ def create_filler_file(
             results_dict[hypothesis] = h_off_filler
     with open(output_file, "w") as f:
         json.dump(results_dict, f)
-    return new_list3
+    return seed_dataset
