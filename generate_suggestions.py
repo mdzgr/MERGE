@@ -279,7 +279,7 @@ def common(sentence1, sentence2, pos_sent_1, pos_sent_2, toks_sent_1, toks_sent_
 
 
 def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
-                         model, tokenizer, all_single_words, common_tokens, suggestion_n=50) -> Dict[Tuple[int,int], List[str]]:
+                         model, tokenizer, all_single_words, common_tokens, suggestion_n=50):
                              #not double-checked
     """ mask_offsets is a list of integer pairs that mark the part of teh string input taht needs to be masked.
         It is a list because in general it might be needed to mask several parts of the input string.
