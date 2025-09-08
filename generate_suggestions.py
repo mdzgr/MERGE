@@ -1,4 +1,28 @@
-
+import os
+import sys
+import importlib
+import glob
+import evaluate
+import re
+import nltk
+import json
+import pickle
+import random
+import svgling
+import pandas as pd
+import spacy
+from os import path as op
+from collections import Counter, defaultdict
+from nltk.metrics.agreement import AnnotationTask as AnnoT
+from nltk.tree import Tree
+from tqdm import tqdm
+from nltk import jaccard_distance
+from google.colab import files
+from tqdm import tqdm
+from tqdm.notebook import tqdm
+from transformers import pipeline
+from typing import Dict, Callable, List, Tuple
+from tqdm.notebook import tqdm
 
 def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
   #not modified for optimality
