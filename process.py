@@ -1,5 +1,8 @@
-
-
+from collections import Counter, defaultdict
+from wordfreq import zipf_frequency
+from contextlib import redirect_stdout
+from generate_suggestions import filter_candidates, filter_snli, pos_toks_extract_from_dataset, process_unmasked_dataset, common
+import string, json, os, re, random
 def flatten_dataset(data):
     '''creates a list of unique items {p,h,l},
     useful when having a nested random dataset'''
@@ -15,13 +18,13 @@ def flatten_dataset(data):
 
     return flattened
 def filter_suggestions_by_contextual_pos(
-    suggestions, # alist of suggestions
-    original_sentence, #the original sentence
-    start_idx, #where to put the suggestions
-    end_idx, #where that ends
-    allowed_pos_tags, #what are the allowed pos tags
-    nlp, #the nlp pipeline
-    batch_size_no # the batch size for how many suggestions will be tagged
+    suggestions,                            # alist of suggestions
+    original_sentence,                      #the original sentence
+    start_idx,                              #where to put the suggestions
+    end_idx,                                #where that ends
+    allowed_pos_tags,                       #what are the allowed pos tags
+    nlp,                                    #the nlp pipeline
+    batch_size_no                           # the batch size for how many suggestions will be tagged
     ):
     """
     tags suggestions via spacy nlp pipeline
@@ -33,14 +36,14 @@ def filter_suggestions_by_contextual_pos(
 
     docs, words, pos_counts, filtered=[], [], Counter(), []
     for suggestion in suggestions:
-        word = suggestion.split(":")[0] #split to get only the word
+        word = suggestion.split(":")[0]           #split to get only the word
         temp_sentence = original_sentence[:start_idx] + word + original_sentence[end_idx:]  #replace it in the sentence !!! why is this based on positions and not regex?
-        docs.append(temp_sentence) #append variants ctreated
+        docs.append(temp_sentence)                #append variants ctreated
     for doc in nlp.pipe(docs, batch_size=batch_size_no): # use pipleline to process in batches
       for token in doc:
-          if token.idx == start_idx: # if the character onset == the onset of the replaced word
+          if token.idx == start_idx:                # if the character onset == the onset of the replaced word
               tokens_with_tags=token.text+':'+token.tag_ #get the token, add the ta
-              words.append(tokens_with_tags) #append it to a list
+              words.append(tokens_with_tags)         #append it to a list
 
     pos_dict = {w.split(":")[0]: w.split(":")[1] for w in words} # make a dict word: pos tag
     for suggestion in suggestions: #for each suggestion
@@ -50,9 +53,6 @@ def filter_suggestions_by_contextual_pos(
         filtered.append(f"{word}:{prob}:{pos_dict[word]}") #form a new entry for the word with token:prob:pos tag of the word
         pos_counts[pos_dict[word]] += 1 #add the count to pos count
     return filtered, pos_counts
-
-
-
 
 def write_general_statistics(output_file, name_file_general,
                             actual_generation, expected_generation,
@@ -252,7 +252,6 @@ def write_statistics_based_on_parameters(output_file, prob, calculate_average_po
         })
 
     return results
-
 
 def generate_mini_datasets(dataset_file_paths, log_for, num_samples=10, sample_size=20):
     """
@@ -614,7 +613,6 @@ def merge_and_analyze_datasets(dataset1, source1,
     return final_dataset, average_per_source
 
 
-
 def process_matching_keys(data, sentence, word_with_pos, all_matching_keys,
           allowed_pos_tags,  pos_tag_filtering, prob, nlp, singles, batch_nlp_classification_no,
           save_suggestions_in_file=False, data_with_suggestions=None, outside_function_counter_for_count_for_most_common_words_their_pos_tag=None,
@@ -705,8 +703,6 @@ def process_matching_keys(data, sentence, word_with_pos, all_matching_keys,
       ]
   return intersected_suggestions, added_pos_counts
 
-
-##3 see how indentation affects code
 def process_dataset(data_with_suggestions,
                     dataset_filtered_already_for_shared_words,
                     if_ids_exist,
