@@ -1,8 +1,58 @@
 from collections import Counter, defaultdict
 from wordfreq import zipf_frequency
 from contextlib import redirect_stdout
-from generate_suggestions import filter_candidates, filter_snli, pos_toks_extract_from_dataset, process_unmasked_dataset, common
+from generate_suggestions import filter_snli, pos_toks_extract_from_dataset, process_unmasked_dataset, common
 import string, json, os, re, random
+
+def filter_candidates(candidates, all_singles=None, excluded_words=None):
+    #not double-checked
+    """
+   filter out unwanted words from json file
+    """
+    if excluded_words is None:
+        excluded_words = {
+            "n't", "not", "no", "never", "neither", "none", "nowise",
+            "nothing", "nobody", "nowhere", "non", "absent", "lacking",
+            "minus", "without", "'s", "'n'", "'re", "'m"
+        }
+
+    filtered = []
+
+    for candidate in candidates:
+        # print('THE CANDIDATE', candidate)
+        word = candidate.split(":")[0]
+        if word.startswith('##'):
+            continue
+
+        if all(char in string.punctuation for char in word):
+            continue
+
+        if word in excluded_words:
+            continue
+
+        if all_singles is not None:
+            word_with_space = ' ' + word
+
+            word_lower = word.lower()
+            word_lower_with_space = ' ' + word_lower
+            word_stripped = word.strip()
+            word_stripped_lower = word_stripped.lower()
+            word_stripped_with_space = ' ' + word_stripped
+            word_stripped_lower_with_space = ' ' + word_stripped_lower
+
+            if (word in all_singles or
+                word_with_space in all_singles or
+                word_lower in all_singles or
+                word_lower_with_space in all_singles or
+                word_stripped in all_singles or
+                word_stripped_with_space in all_singles or
+                word_stripped_lower in all_singles or
+                word_stripped_lower_with_space in all_singles):
+                continue
+        filtered.append(candidate)
+
+    return filtered
+
 def flatten_dataset(data):
     '''creates a list of unique items {p,h,l},
     useful when having a nested random dataset'''
