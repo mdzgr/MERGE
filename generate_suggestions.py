@@ -359,7 +359,7 @@ def create_filler_file(
     mock_test: bool = False,
     add_id_to_dataset: bool = False,
     output_file: str = None,
-) -> List[Dict]:
+):
 #not double-checked
     """
         Function generating a new inflated dataset with suggestion from a language model, alongside the initial split of sentences modified
