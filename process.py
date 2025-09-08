@@ -571,8 +571,11 @@ def merge_and_analyze_datasets(dataset1, source1,
                                   #    [D2 Item 1] FULL ITEM: {'id': '2677109430.jpg#1r1n:church:NN:5:11:4:10:roof:h:roberta', 'premise': 'This roof choir sings to the masses as they sing joyous songs from the book at a roof.', 'hypothesis': 'The roof has cracks in the ceiling.', 'label': 'neutral'}
                                   # -> Added ID: 2677109430.jpg#1r1n:church:NN:5:11:4:10:roof:h:roberta
                                   # -> Unique ID count so far: 3
-    for n, parts in enumerate((s.split(":") for s in sorted(all_ids)), start=1):
-      word_pos_lookup[":".join(parts[:3] + [parts[-3]])][parts[-2]].add(parts[-1])  #word_pos_lookup structure {'2677109430.jpg#1r1n:church:NN:apartment': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:attic': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:basement': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:bathroom': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:bedroom': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:building': {'h': {'roberta', 'bert'}}, '2677109430.jpg#1r1n:church:NN:cabin': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:cellar': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:flat': {'h': {'roberta'}}}
+    for n, full_id in enumerate(sorted(all_ids), start=1):
+        parts = full_id.split(':') #split id
+        word_pos_id = ':'.join(parts[:3] + [parts[-3]])
+        origin, model = parts[-2],  parts[-1]
+        word_pos_lookup.setdefault(word_pos_id, {}).setdefault(origin, set()).add(model) #word_pos_lookup structure {'2677109430.jpg#1r1n:church:NN:apartment': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:attic': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:basement': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:bathroom': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:bedroom': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:building': {'h': {'roberta', 'bert'}}, '2677109430.jpg#1r1n:church:NN:cabin': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:cellar': {'h': {'roberta'}}, '2677109430.jpg#1r1n:church:NN:flat': {'h': {'roberta'}}}
     renamed, seen_ids = [], set()
 
 
