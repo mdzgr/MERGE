@@ -138,8 +138,11 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
               1 = inflated datasets, e.g. 6160193920.jpg#4r1e:very:RB:49:53:13:17:really
       calculate_per_label: if specified it will calculate PA for every label separately
   '''
-  with open(json_filepath, "r") as f:
-      data = json.load(f)
+  if '.json' in json_filepath:
+    with open(json_filepath, "r") as f:
+        data = json.load(f)
+  else:
+    data=json_filepath
   model=data[0]['model']
   input_file=data[0]['input_file']
 
