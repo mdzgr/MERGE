@@ -52,7 +52,7 @@ def map_labels_to_numbers(dataset, model_name):
         new_dataset.append(new_entry) # append new entry with converted label
     return new_dataset # return dataset with converted labels
 
-def predictions_nli(model_name, data_json_file, batch_size_number, device_g_c, batch_function, tok_model_function):
+def predictions_nli(model_name, model_name_dif_token, data_json_file, batch_size_number, device_g_c, batch_function, tok_model_function):
     #not double-checked
     """
     calculates predictions for a dataset
@@ -60,7 +60,7 @@ def predictions_nli(model_name, data_json_file, batch_size_number, device_g_c, b
     args:
     model_name: model_name
     data_json_file: json file with stimuli for predictions
-    batch_size_number: batch number
+    batch_size_number: batch number for predictions
     device_g_c:  cuda or cpu
     batch_function: takes function from assign.tools to eval in batches
     tok_model_function: tokenizer function from assign tools
@@ -70,14 +70,8 @@ def predictions_nli(model_name, data_json_file, batch_size_number, device_g_c, b
     """
     with open(data_json_file, "r") as f:
         data = json.load(f)
-    data = map_labels_to_numbers(data, model_name)
+    data = map_labels_to_numbers(data, model_name_dif_token)
 
-    moodels={
-        "textattack/bert-base-uncased-snli": "textattack/bert",
-        "ynie/roberta-large-snli_mnli_fever_anli_R1_R2_R3-nli": "ynie/roberta",
-        "ynie/albert-xxlarge-v2-snli_mnli_fever_anli_R1_R2_R3-nli": "ynie/albert",
-        "ynie/bart-large-snli_mnli_fever_anli_R1_R2_R3-nli": "ynie/bart"
-    }
     tokenizer, model_cpu = tok_model_function(model_name)
     model_cpu.to(device_g_c)
     prem_hypo_list = [(item['premise'], item['hypothesis']) for item in data]
@@ -87,8 +81,7 @@ def predictions_nli(model_name, data_json_file, batch_size_number, device_g_c, b
         "model": model_name,
         "predictions": preds2
     }
-    safe_model_name = model_name.replace('/', '_')
-    output_filename = f"{data_json_file.rsplit('.', 1)[0]}_{safe_model_name}_predictions.json"
+    output_filename = f"{data_json_file.rsplit('.', 1)[0]}_{model_name_dif_token}_predictions.json"
     with open(output_filename, "w") as f:
         json.dump(output, f, indent=4, default=lambda o: o.item() if hasattr(o, "item") else o)
     return output, output_filename
