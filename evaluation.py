@@ -1,4 +1,5 @@
-
+import json, evaluate
+from collections import Counter, defaultdict
 def transform_results(flat_list):
   '''formats results into a dictionary with different entries for standard and pattern accuracy'''
   structured_results = defaultdict(list)
