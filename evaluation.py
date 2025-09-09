@@ -121,11 +121,12 @@ def merge_data_and_predictions(data_json_file, predictions_file, model_name, mod
 
     return merged, output_filename
 
-def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thresholds_list:list, id_type: int, calculate_per_label=False):
+
+def compute_all_metrics(data_path_list, name, dictionary_result, type_evaluation, thresholds_list:list, id_type: int, calculate_per_label=False):
     #not-double-checked
   '''calculates various metrics: SA, PA Acc, Consistency (first, average-based) separately (or not) per label
   args:
-      json_filepath: file with stimuli and predictions
+      data: can be json file or list with predictions
       dictionary_result: dict where to store results
       type_evaluation: the reference taken in eval has 3 poss values:
               0 = gold label comparison (for SA and PA)
@@ -138,11 +139,11 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
               1 = inflated datasets, e.g. 6160193920.jpg#4r1e:very:RB:49:53:13:17:really
       calculate_per_label: if specified it will calculate PA for every label separately
   '''
-  if '.json' in json_filepath:
-    with open(json_filepath, "r") as f:
+  if '.json' in data_path_list:
+    with open(data_path_list, "r") as f:
         data = json.load(f)
   else:
-    data=json_filepath
+    data=data_path_list
   model=data[0]['model']
   input_file=data[0]['input_file']
 
@@ -154,10 +155,7 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
   normal_accuracy = normal_result["accuracy"]
   groups = defaultdict(lambda: {"predictions": [], "label": None})
   for entry in data:
-      if id_type==0:
-        id_prefix = entry["id"].split(":")[0]
-      else:
-        id_prefix=entry["id"]
+      id_prefix = entry["id"].split(":")[0] if id_type == 0 else entry["id"]
       groups[id_prefix]["predictions"].append(entry["label_index"])
       if groups[id_prefix]["label"] is None:
           groups[id_prefix]["label"] = entry["gold_label"]
@@ -170,8 +168,7 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
         per_label_accuracies = {label: {} for label in unique_labels}
 
   for threshold in thresholds:
-      nested_final_predictions = []
-      nested_labels = []
+      nested_final_predictions, nested_labels = [], []
       if calculate_per_label:
             label_predictions = {label: [] for label in unique_labels}
             label_references = {label: [] for label in unique_labels}
@@ -216,7 +213,7 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
         )
 
   result_dict = {
-    "input_file": json_filepath,
+    "input_file": name,
     "normal_accuracy": normal_accuracy,
     key_name: nested_accuracies
   }
@@ -226,10 +223,6 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
 
   dictionary_result[model].append(result_dict)
 
-  print("SAMPLE Accuracy:", normal_accuracy)
-  for threshold, acc in nested_accuracies.items():
-      print(f"PATTERN Accuracy at threshold {threshold}: {acc}")
-
   if calculate_per_label:
         print("\nPer-label accuracies:")
         for label in unique_labels:
@@ -237,17 +230,8 @@ def compute_all_metrics(json_filepath, dictionary_result, type_evaluation, thres
             for threshold, acc in per_label_accuracies[label].items():
                 print(f"  Threshold {threshold}: {acc}")
 
-  return_dict = {
-        "normal_accuracy": normal_accuracy,
-        "nested_accuracies": nested_accuracies,
-        "dictionary_results": dictionary_result
-    }
-
-  return return_dict
-
-
-
-
+  return dictionary_result
+  
 def get_base_ids_pos(filepath):
     """Reads a JSON file and extracts the first part of the 'id' for each entry."""
     try:
