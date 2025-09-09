@@ -86,8 +86,7 @@ def predictions_nli(model_name, model_name_dif_token, data_json_file, batch_size
     with open(output_filename, "w") as f:
         json.dump(output, f, indent=4, default=lambda o: o.item() if hasattr(o, "item") else o)
     return output, output_filename
-
-def merge_data_and_predictions(data_json_file, predictions_file, model_name):
+def merge_data_and_predictions(data_json_file, predictions_file, model_name, model_name_dif_tok):
     #not double-checked
     '''merges documents of the inflated dataset and the predictions from the model by zipping the data from json'''
     with open(data_json_file, "r") as f:
@@ -95,7 +94,7 @@ def merge_data_and_predictions(data_json_file, predictions_file, model_name):
     with open(predictions_file, "r") as f:
         predictions_dict = json.load(f)
     merged = []
-    data = map_labels_to_numbers(data, model_name)
+    data = map_labels_to_numbers(data, model_name_dif_tok)
     file_name=predictions_dict.get("input_file")
     model=predictions_dict.get("model")
     predictions = predictions_dict.get("predictions", [])
@@ -118,6 +117,7 @@ def merge_data_and_predictions(data_json_file, predictions_file, model_name):
     output_filename = data_json_file.rsplit('.', 1)[0] + '_merged.json'
     with open(output_filename, 'w') as f:
         json.dump(merged, f, indent=4)
+
 
     return merged, output_filename
 
