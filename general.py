@@ -71,7 +71,7 @@ def load_data(json_input):
       raise ValueError("Input must be a filepath or a list of dictionaries.")
   return data
 
-  def combine_json_files(file_paths, output_file):
+def combine_json_files(file_paths, output_file):
     """
     Combines multiple JSON files into a single json file.
     """
