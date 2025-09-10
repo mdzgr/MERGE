@@ -1,3 +1,5 @@
+from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
 
 def plot_pattern_accuracy(dictionary_results, model, tags, color_map_r, style_map_leg,
                          color_dict, legend_dict, name_plot, title_replacement,
