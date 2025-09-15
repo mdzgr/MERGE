@@ -43,6 +43,9 @@ def map_labels_to_numbers(dataset, model_name):
           label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
     if "_bart" in model_name.lower():
         label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
+    if "GPT2" in model_name.lower():
+        label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
+    
 
     new_dataset = []
     for entry in dataset: #  for each entry
