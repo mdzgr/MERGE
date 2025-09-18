@@ -106,10 +106,9 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
         It is a list because in general it might be needed to mask several parts of the input string.
         Returns a dictionary with character offsets as keys and a list of ranked suggestions as values.
     """
-    #not modified for optimality
-    model_architecture = model.config.architectures[0].lower()
-    mask_token = "<mask>" if model_architecture == "roberta" else "[MASK]"
-    suggestions, all_tuples = {},[]
+    #not modified for optimization
+    mask_token = tokenizer.mask_token 
+    suggestions, all_tuples=  {}, []
     for w in mask_offsets:
       if len(w)>1:
         for i in w:
@@ -120,19 +119,15 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
     for i, j in mask_offsets:
       masked_token_orig = input_str[i:j]
       offset_key = str(i)+':'+str(j)
-      if masked_token_orig in common_tokens:
-          pos_tag = common_tokens[masked_token_orig].get('pos', 'UNK')
-      else:
-          pos_tag = "UNK"
+      pos_tag = common_tokens.get(masked_token_orig, {}).get("pos", "UNK")
       candidate_list = []
       masked_input = input_str[:i] + f'{mask_token}' + input_str[j:]
       if masked_input.endswith(mask_token):
           masked_input += '.'
       if mask_token == '<mask>' and not masked_input.startswith('<mask>'):
         masked_token_orig=' '+masked_token_orig
-        if masked_input.startswith('<mask>'):
-          print('the mask that is fed to the model for probability when it is the first tokem', masked_token_orig)
       generated, probability_masked_word = generate_mask_predictions(model, tokenizer, masked_input, mask_token, masked_token_orig, suggestion_n)
+      
       if mask_token == '<mask>' and not masked_input.startswith('<mask>'):
         masked_token_orig=masked_token_orig.strip()
       token_key=f"{masked_token_orig}:{pos_tag}"
@@ -142,7 +137,7 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
         offset_key = f"{offset_key}:{probability_masked_word:.2e}"
       for k in generated:
           token = k['token_str'].lstrip()
-          token_1=token.strip('Ġ')
+          token_1=token.strip('Ġ▁')
           candidate_list.append(f"{token_1}:{k['score']:.2e}")
       if len(candidate_list) != suggestion_n:
           print(f"\nWarning: Expected {suggestion_n} suggestions but got {len(candidate_list)}")
