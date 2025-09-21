@@ -360,6 +360,7 @@ def create_filler_file(
     num_sentences_to_process_dataset: int = None,
     num_sentences_compliant_criteria: int = None,
     mock_test: bool = False,
+    id_mock_test: str=None,
     add_id_to_dataset: bool = False,
     output_file: str = None,
 ):
@@ -386,7 +387,7 @@ def create_filler_file(
     """
 
     label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
-    new_list4 = []
+    new_list4, results_dict = [], {}
 
     dataset = dataset[split]
     SNLI_filtered_2 = filter_snli(dataset, mapping, pos_to_mask, min_common_words,
@@ -396,10 +397,9 @@ def create_filler_file(
     seed_dataset, lab = process_unmasked_dataset(filtered_list_1, no_neutral, no_ential, no_contradiction, id=add_id_to_dataset)
     model = AutoModelForMaskedLM.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    results_dict = {}
     for p in tqdm(filtered_list_1):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h = (p['id'], p['premise'], p['hypothesis'], p['p_t'], p['p_p'], p['h_t'], p['h_p'] )
-        if mock_test and id != "3827316480.jpg#0r1e": 
+        if mock_test and id != id_mock_test:
           continue
         common_tokens_dictionary, p_off, h_off, all_nouns_singles = common(
             premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2, exclude_words_part_of_p_and_h
