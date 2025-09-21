@@ -1153,7 +1153,7 @@ def merge_and_analyze_from_results(
     *,
     models: list[str],
     pos_tag: str,
-    type_evaluation: str;
+    type_evaluation: str,
     min_count: int,
     name: str | None = None,
     opposite: bool = True,
