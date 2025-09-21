@@ -97,8 +97,6 @@ def generate_mask_predictions(model, tokenizer, context, mask_token, target_word
         })
     return prediction_list, target_probability
 
-
-
 def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
                          model, tokenizer, all_single_words, common_tokens, suggestion_n=50):
                              #not double-checked
@@ -107,7 +105,7 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
         Returns a dictionary with character offsets as keys and a list of ranked suggestions as values.
     """
     #not modified for optimization
-    mask_token = tokenizer.mask_token 
+    mask_token = tokenizer.mask_token
     suggestions, all_tuples=  {}, []
     for w in mask_offsets:
       if len(w)>1:
@@ -127,7 +125,7 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
       if mask_token == '<mask>' and not masked_input.startswith('<mask>'):
         masked_token_orig=' '+masked_token_orig
       generated, probability_masked_word = generate_mask_predictions(model, tokenizer, masked_input, mask_token, masked_token_orig, suggestion_n)
-      
+
       if mask_token == '<mask>' and not masked_input.startswith('<mask>'):
         masked_token_orig=masked_token_orig.strip()
       token_key=f"{masked_token_orig}:{pos_tag}"
@@ -136,9 +134,8 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
       else:
         offset_key = f"{offset_key}:{probability_masked_word:.2e}"
       for k in generated:
-          token = k['token_str'].lstrip()
-          token_1=token.strip('Ġ▁')
-          candidate_list.append(f"{token_1}:{k['score']:.2e}")
+          token = k["token_str"].lstrip().strip("Ġ▁")
+          candidate_list.append(f"{token}:{k['score']:.2e}")
       if len(candidate_list) != suggestion_n:
           print(f"\nWarning: Expected {suggestion_n} suggestions but got {len(candidate_list)}")
           print(f"Input string: {input_str}")
@@ -168,8 +165,6 @@ def extract_nouns_and_verbs(pos_tags, tokens, pos_type):
             return {tokens[i] for i, pos in enumerate(pos_tags) if pos in adverb_tags}
         else:
             raise ValueError("Invalid pos_type. Choose 'noun', 'verb', 'adjective', 'adverb', 'merged_n_a', 'merged_v_n', 'merged_v_a', or ' 'merged_v_a_n''.")
-
-
 
 def flatten_extracted_words(extracted):
   if isinstance(extracted, set):
