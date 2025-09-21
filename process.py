@@ -16,11 +16,32 @@ def filter_candidates(candidates, all_singles=None, excluded_words=None):
             "minus", "without", "'s", "'n'", "'re", "'m"
         }
 
+    COMMON_PREFIXES = {
+    "anti", "auto", "bi", "co", "contra", "counter", "de", "dis", "en", "em",
+    "extra", "hetero", "homo", "hyper", "il", "im", "in", "ir", "inter", "intra",
+    "macro", "micro", "mid", "mis", "mono", "multi", "non", "over", "post",
+    "pre", "pro", "pseudo", "re", "semi", "sub", "super", "tele", "trans",
+    "tri", "ultra", "un", "under"
+    }
+
+    COMMON_SUFFIXES = {
+        "able", "ible", "al", "ally", "ance", "ence", "ant", "ent",
+        "ary", "ery", "ory", "ate", "ed", "en", "er", "est", "ful",
+        "hood", "ic", "ical", "ify", "ing", "ion", "tion", "sion",
+        "ish", "ism", "ist", "ity", "less", "let", "like", "ling",
+        "ly", "ment", "ness", "ous", "ship", "y"
+    }
+
     filtered = []
 
     for candidate in candidates:
         # print('THE CANDIDATE', candidate)
         word = candidate.split(":")[0]
+        if len(word)==1:
+            continue # word with len(1) usually modify structure
+            #'blue shirt' > 'f shirt'
+        if word in COMMON_PREFIXES or word in COMMON_SUFFIXES:
+            continue
         if word.startswith('##'):
             continue
 
@@ -50,8 +71,6 @@ def filter_candidates(candidates, all_singles=None, excluded_words=None):
                 word_stripped_lower_with_space in all_singles):
                 continue
         filtered.append(candidate)
-
-    return filtered
 
 def flatten_dataset(data):
     '''creates a list of unique items {p,h,l},
@@ -876,12 +895,10 @@ def process_dataset(data_with_suggestions,
     for entry in tqdm(processed_second_data):
 
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h, label = (entry['id'], entry['premise'], entry['hypothesis'], entry['p_t'],entry['p_p'], entry['h_t'], entry['h_p'], entry['label'] )
+    
         premise_id = premise
         hypothesis_id = hypothesis
         word2fillers, word2probabilities, word2pos, _, _, _, positions = [defaultdict(list), defaultdict(list), defaultdict(int), defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)]
-        #
-
-
         if premise_id in data_with_suggestions.keys() and hypothesis_id in data_with_suggestions.keys():
           common_dict, p_positions, h_positions, _ = common(premise, hypothesis, pos_p, pos_h, tok_p, tok_h, pos_to_mask, source_1, source_2)
                                                       #common dict {'black': {'positions': [(11, 16)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a '}, 'commercial': {'positions': [(29, 39)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a black shirt, in a '}}
@@ -923,7 +940,6 @@ def process_dataset(data_with_suggestions,
                 total_remaining_suggestions=number_hypothesis_suggestions_remaining_all_filtering, total_words_with_10_plus=no_hypothesis_words_with_10more_suggestions_higher_probability, no_prob_counter=hypothesis_replaced_words_had_no_probability,
                 average_prob_suggestions=hypothesis_avg_suggestion_prob, diff_total=hypothesis_diff_after_pos_filter, words_replaced= words_replaced_h, average_prob_replaced=average_prob_replaced_hypothesis
               )
-
             if pos_tag_filtering=='yes' and has_pos_tags(premise_suggestions)==False or has_pos_tags(hypothesis_suggestions)==False or premise_pos_filter_applied != True or hypothesis_pos_filter_applied!= True: #check again if some suggestions do not have pos tags
               print('Some of the suggestions for premise or hypothesis are not tagged for POS tag')
 
@@ -1045,6 +1061,7 @@ def process_dataset(data_with_suggestions,
                 model_name_id = (
                       "bert" if model_name == "bert-base-cased"
                       else "deberta" if model_name == "deberta"
+                      else "albert" if model_name == "albert"
                       else "roberta"
                   )
                 processed_entry = {
@@ -1102,6 +1119,7 @@ def process_dataset(data_with_suggestions,
       with open(save_suggestions_in_file, 'w') as f_out:
           json.dump(data_with_suggestions, f_out)
     return processed_data, seed_dataset, file_counts, premise_count, hypothesis_count, word_count_freq_premise, word_count_freq_hypothesis, replacement_summary
+
 
 
 def get_base_ids(filepath):
