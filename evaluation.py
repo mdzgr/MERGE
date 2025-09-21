@@ -32,27 +32,20 @@ def map_labels_to_numbers(dataset, model_name):
     """
     #if cretain token is in model name
     #instantiate label_mapping with certain values
-
+    label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
     if "_bert" in model_name.lower():
         label_mapping = {'entailment': 1, 'neutral':2 , 'contradiction': 0}
-    if "_roberta" in model_name.lower():
-        label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
-    if "_deberta" in model_name.lower():
-        label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
-    if "albert-xxlarge-v2" in model_name.lower():
-          label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
-    if "_bart" in model_name.lower():
-        label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
-    if "GPT2" in model_name.lower():
-        label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
-    
 
     new_dataset = []
     for entry in dataset: #  for each entry
 
         new_entry = entry.copy() #copy it
         original_label = new_entry.get('label') #get label mapping correspondance
-        new_entry['label'] = label_mapping.get(original_label, None) #return -1 if value is not found, return None
+
+        try:
+          new_entry['label'] = label_mapping.get(original_label, None) #return -1 if value is not found, return None
+        except UnboundLocalError:
+          print(original_label)
         new_dataset.append(new_entry) # append new entry with converted label
     return new_dataset # return dataset with converted labels
 
