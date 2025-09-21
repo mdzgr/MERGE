@@ -4,6 +4,7 @@ from contextlib import redirect_stdout
 from MERGE.generate_suggestions import filter_snli, pos_toks_extract_from_dataset, process_unmasked_dataset, common
 import string, json, os, re, random
 from tqdm import tqdm
+import sys, contextlib
 def filter_candidates(candidates, all_singles=None, excluded_words=None):
     #not double-checked
     """
