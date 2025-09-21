@@ -71,6 +71,7 @@ def filter_candidates(candidates, all_singles=None, excluded_words=None):
                 word_stripped_lower_with_space in all_singles):
                 continue
         filtered.append(candidate)
+    return filtered
 
 def flatten_dataset(data):
     '''creates a list of unique items {p,h,l},
@@ -546,6 +547,8 @@ def ranked_overlap(list_of_lists, probs, type_):
 
 def merge_and_analyze_datasets(dataset1, source1,
     dataset2, source2,
+    pos_name_file_name,
+    type,
     min_count,
     name=None,
     opposite=True,
@@ -658,32 +661,32 @@ def merge_and_analyze_datasets(dataset1, source1,
                 continue
 
 
-    final_counts = Counter(id_0(item['id']) for item in renamed) #count the elements of each base id
-    qualified_base_ids = {bid for bid, count in final_counts.items() if count >= min_count} #get base ids with more than min count
-    print(f"Qualified base IDs (count >= {min_count}): {len(qualified_base_ids)}")
+    outfile = f"potential_variants_{pos_name_file_name}_{type}_stats.txt"  # change path/name if you like
 
-    final_dataset = [item for item in sorted(renamed, key=lambda x: x['id']) if id_0(item['id']) in qualified_base_ids]
-    print(f"length of final dataset {len(final_dataset)}")
-
-    source_counts = Counter(item['id'].split(':')[-1] for item in final_dataset) #count values per model
-    total_instances = sum(source_counts.values()) #sum the values for total count
-    print(f"Total instances in final dataset: {total_instances}")
-    print(f"Source counts: {dict(source_counts)}")
-
-    average_per_source = (
-    {src: count / total_instances for src, count in source_counts.items()}
-    if total_instances else {}
-    )
-    label_counts = Counter(item['label'] for item in final_dataset)
-
-    print("\n=== Unique  base_ids (initial SNLI ids) that have enough suggestions", len(qualified_base_ids))
-    print("=== Label Counts in Final Dataset ===")
-    for label, count in label_counts.items():
-        print(f"{label}: {count}")
-
-    print("\n=== Average Instances per Source ===")
-    for src, avg in average_per_source.items():
-        print(f"{src}: {avg}")
+    with open(outfile, "w", encoding="utf-8") as f, contextlib.redirect_stdout(Tee(sys.stdout, f)):
+        final_counts = Counter(id_0(item['id']) for item in renamed)  # count the elements of each base id
+        qualified_base_ids = {bid for bid, count in final_counts.items() if count >= min_count}  # get base ids with more than min count
+        print(f"Qualified base IDs (count >= {min_count}): {len(qualified_base_ids)}")
+    
+        final_dataset = [item for item in sorted(renamed, key=lambda x: x['id']) if id_0(item['id']) in qualified_base_ids]
+        print(f"length of final dataset {len(final_dataset)}")
+    
+        source_counts = Counter(item['id'].split(':')[-1] for item in final_dataset)  # count values per model
+        total_instances = sum(source_counts.values())  # sum the values for total count
+        print(f"Total instances in final dataset: {total_instances}")
+        print(f"Source counts: {dict(source_counts)}")
+    
+        average_per_source = ({src: count / total_instances for src, count in source_counts.items()} if total_instances else {})
+        label_counts = Counter(item['label'] for item in final_dataset)
+    
+        print("\n=== Unique  base_ids (initial SNLI ids) that have enough suggestions", len(qualified_base_ids))
+        print("=== Label Counts in Final Dataset ===")
+        for label, count in label_counts.items():
+            print(f"{label}: {count}")
+    
+        print("\n=== Average Instances per Source ===")
+        for src, avg in average_per_source.items():
+            print(f"{src}: {avg}")
     return final_dataset, average_per_source
 
 
@@ -1150,6 +1153,7 @@ def merge_and_analyze_from_results(
     *,
     models: list[str],
     pos_tag: str,
+    type_evaluation: str;
     min_count: int,
     name: str | None = None,
     opposite: bool = True,
@@ -1178,6 +1182,8 @@ def merge_and_analyze_from_results(
     return merge_and_analyze_datasets(
         dataset1, source1,
         dataset2, source2,
+        pos_tag, 
+        type_evaluation,
         min_count,
         name=name,
         opposite=opposite,
