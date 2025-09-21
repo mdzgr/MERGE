@@ -86,7 +86,7 @@ def plot_pattern_accuracy(dictionary_results, model, tags, color_map_r, style_ma
     plt.show()
 
 
-def load_data(file_paths, pos_tag):
+def load_data_matirx(file_paths, pos_tag):
     """Load data from multiple model files"""
     models_data = {}
     for file_path in file_paths:
@@ -222,7 +222,7 @@ def calculate_cross_model_overlaps(models_data, seed_data):
 
 def analyze_model_overlap_enhanced(file_paths, seed_file_path, pos_tag_name, name_map):
     """Enhanced token-level analysis"""
-    models_data = load_data(file_paths, pos_tag_name)
+    models_data = load_data_matirx(file_paths, pos_tag_name)
     seed_data = load_seed_dataset(seed_file_path)
     model_names = list(models_data.keys())
 
