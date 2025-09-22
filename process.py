@@ -699,7 +699,6 @@ def merge_and_analyze_datasets(dataset1, source1,
           dual_print(f"{src}: {avg}")
     return final_dataset, average_per_source
 
-
 def process_matching_keys(data, sentence, word_with_pos, all_matching_keys,
           allowed_pos_tags,  pos_tag_filtering, prob, nlp, singles, batch_nlp_classification_no,
           save_suggestions_in_file=False, data_with_suggestions=None, outside_function_counter_for_count_for_most_common_words_their_pos_tag=None,
@@ -764,7 +763,10 @@ def process_matching_keys(data, sentence, word_with_pos, all_matching_keys,
               continue
 
           words_replaced+=1 if original_prob !=None else 0
-          cleaned_list = [c for c in cleaned_list if float(c.split(":")[1]) >= original_prob]
+          # print(cleaned_list)
+          # cleaned_list_str = [c for c in cleaned_list if type(c.split(":")[1]) == 'str']
+          # print(cleaned_list_str)
+          cleaned_list = [c for c in cleaned_list if c.split(":")[1] != '' and float(c.split(":")[1]) >= original_prob]
           total_words_with_10_plus += 1 if len(cleaned_list) > 10 else 0
 
           for c in cleaned_list:
@@ -953,8 +955,14 @@ def process_dataset(data_with_suggestions,
                 total_remaining_suggestions=number_hypothesis_suggestions_remaining_all_filtering, total_words_with_10_plus=no_hypothesis_words_with_10more_suggestions_higher_probability, no_prob_counter=hypothesis_replaced_words_had_no_probability,
                 average_prob_suggestions=hypothesis_avg_suggestion_prob, diff_total=hypothesis_diff_after_pos_filter, words_replaced= words_replaced_h, average_prob_replaced=average_prob_replaced_hypothesis
               )
-            if pos_tag_filtering=='yes' and has_pos_tags(premise_suggestions)==False or has_pos_tags(hypothesis_suggestions)==False or premise_pos_filter_applied != True or hypothesis_pos_filter_applied!= True: #check again if some suggestions do not have pos tags
-              print('Some of the suggestions for premise or hypothesis are not tagged for POS tag')
+            # print('pos tag filtering', pos_tag_filtering)
+            if (
+                  (pos_tag_filtering == 'yes' and not has_pos_tags(premise_suggestions))
+                  or (pos_tag_filtering == 'yes' and not has_pos_tags(hypothesis_suggestions))
+                  or (pos_tag_filtering == 'yes'  and not premise_pos_filter_applied)
+                  or (pos_tag_filtering == 'yes'  and not hypothesis_pos_filter_applied)
+              ):
+                  print("Some of the suggestions for premise or hypothesis are not tagged for POS tag")
 
             premise_fillers= [c.split(":")[0] for c in premise_suggestions] #suggestions
             hypothesis_fillers= [c.split(":")[0] for c in hypothesis_suggestions]
@@ -1132,7 +1140,6 @@ def process_dataset(data_with_suggestions,
       with open(save_suggestions_in_file, 'w') as f_out:
           json.dump(data_with_suggestions, f_out)
     return processed_data, seed_dataset, file_counts, premise_count, hypothesis_count, word_count_freq_premise, word_count_freq_hypothesis, replacement_summary
-
 
 
 def get_base_ids(filepath):
