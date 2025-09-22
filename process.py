@@ -970,8 +970,8 @@ def process_dataset(data_with_suggestions,
               ):
                   print("Some of the suggestions for premise or hypothesis are not tagged for POS tag")
 
-            premise_fillers= [c.split(":")[0] for c in premise_suggestions] #suggestions
-            hypothesis_fillers= [c.split(":")[0] for c in hypothesis_suggestions]
+            premise_fillers= [c.split(":")[0] for c in premise_suggestions if c.split(":")[1] != ''] #suggestions
+            hypothesis_fillers= [c.split(":")[0] for c in hypothesis_suggestions if c.split(":")[1] != '']
             if len(premise_fillers)==0 and len(hypothesis_fillers)==0: #I concluded this does not affect the code
               continue
             common_suggestions = set(premise_fillers) & set(hypothesis_fillers)
