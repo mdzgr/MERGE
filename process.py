@@ -970,8 +970,8 @@ def process_dataset(data_with_suggestions,
               ):
                   print("Some of the suggestions for premise or hypothesis are not tagged for POS tag")
 
-            premise_fillers= [c.split(":")[0] for c in premise_suggestions if c.split(":")[1] != ''] #suggestions
-            hypothesis_fillers= [c.split(":")[0] for c in hypothesis_suggestions if c.split(":")[1] != '']
+            premise_fillers= [c.split(":")[0] for c in premise_suggestions] #suggestions
+            hypothesis_fillers= [c.split(":")[0] for c in hypothesis_suggestions]
             if len(premise_fillers)==0 and len(hypothesis_fillers)==0: #I concluded this does not affect the code
               continue
             common_suggestions = set(premise_fillers) & set(hypothesis_fillers)
@@ -985,8 +985,8 @@ def process_dataset(data_with_suggestions,
                     words_with_not_enough_replacements_inside_loop_utilitary += 1
                 continue
 
-            premise_probabilities = [float(c.split(":")[1]) for c in premise_suggestions]
-            hypothesis_probabilities = [float(c.split(":")[1]) for c in hypothesis_suggestions]
+            premise_probabilities = [float(c.split(":")[1]) for c in premise_suggestions  if c.split(":")[1] != '']
+            hypothesis_probabilities = [float(c.split(":")[1]) for c in hypothesis_suggestions  if c.split(":")[1] != '']
 
             word2fillers[key] = [premise_fillers, hypothesis_fillers]
             word2probabilities[key] = [premise_probabilities, hypothesis_probabilities]
