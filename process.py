@@ -780,8 +780,14 @@ def process_matching_keys(data, sentence, word_with_pos, all_matching_keys,
     presence = defaultdict(list)
     for lst in per_key_cleaned_lists:
       for s in set(lst):  #                                                       use set() to avoid duplicates in the same list
+        if pos_tag_filtering =='yes':
           word, val, pos = s.split(":")
           presence[word].append((float(val), pos))
+        else: 
+          parts = s.split(":")
+          word, val = parts[0], parts[1]
+          pos1=None   # first two pieces
+          presence[word].append((float(val), pos1))
     keep = {
           w: f"{w}:{sum(v for v, _ in vals) / len(vals)}:{vals[0][1]}"            # assumming POS tag is the same for the 2 options
           for w, vals in presence.items() if len(vals) >= 2                     # appears in ≥2 keys
