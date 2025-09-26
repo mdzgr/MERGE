@@ -90,7 +90,7 @@ def load_data_matirx(file_paths, pos_tag):
     """Load data from multiple model files"""
     models_data = {}
     for file_path in file_paths:
-        model_name = file_path.split('_')[0]
+        model_name = file_path.split('_')[-1].split('.')[0]
         with open(file_path, 'r') as f:
             models_data[model_name] = json.load(f)
     return models_data
@@ -181,7 +181,7 @@ def get_position_wise_common_tokens(data1, data2):
         position_common[pos] = common_tokens
 
     return position_common
-def calculate_cross_model_overlaps(models_data, seed_data):
+def calculate_cross_model_overlaps(models_data, seed_data, verbose):
     """Calculate cross-model premise-hypothesis overlaps"""
     model_names = list(models_data.keys())
     n_models = len(model_names)
@@ -190,7 +190,38 @@ def calculate_cross_model_overlaps(models_data, seed_data):
     for i, model1 in enumerate(model_names):
         for j, model2 in enumerate(model_names):
             if i == j:
-                overlap_matrix[i][j] = calculate_premise_hypothesis_overlap_token_level(models_data, seed_data)[model1]
+                problem_unique_counts = []
+
+                for problem in seed_data:
+                    premise, hypothesis = problem['premise'], problem['hypothesis']
+
+                    if all(s in models_data[m] for m in [model1, model2] for s in [premise, hypothesis]):
+                        common1 = get_position_wise_common_tokens(models_data[model1][premise], models_data[model1][hypothesis])
+
+                        # Get all common tokens from other models
+                        other_models_tokens = set()
+                        for other_model in model_names:
+                            if other_model != model1:
+                                common_other = get_position_wise_common_tokens(models_data[other_model][premise], models_data[other_model][hypothesis])
+                                for pos_tokens in common_other.values():
+                                    other_models_tokens.update(pos_tokens)
+
+                        # Get unique tokens from current model
+                        model_tokens = set()
+                        for pos_tokens in common1.values():
+                            model_tokens.update(pos_tokens)
+                        if verbose:
+                          print('Length other tokens',len(other_models_tokens))
+                          print('The other tokens linked to lenigh',other_models_tokens)
+                          print('the number of tokens in this model',len(model_tokens))
+                        unique_tokens = model_tokens - other_models_tokens
+                        if verbose:
+                          intersection = model_tokens & other_models_tokens
+                          print('the intersection', len(intersection))
+                          print('the number of unique tokens', len(unique_tokens))
+                        problem_unique_counts.append(len(unique_tokens))
+
+                overlap_matrix[i][j] = np.mean(problem_unique_counts) if problem_unique_counts else 0.0
             else:
                 problem_overlaps = []
 
@@ -198,20 +229,19 @@ def calculate_cross_model_overlaps(models_data, seed_data):
                     premise, hypothesis = problem['premise'], problem['hypothesis']
 
                     if all(s in models_data[m] for m in [model1, model2] for s in [premise, hypothesis]):
-                        common1 = get_position_wise_common_tokens(models_data[model1][premise], models_data[model1][hypothesis]) #get common suggestions for each position bt P and H
-                        common2 = get_position_wise_common_tokens(models_data[model2][premise], models_data[model2][hypothesis]) #for two models
+                        common1 = get_position_wise_common_tokens(models_data[model1][premise], models_data[model1][hypothesis])
+                        common2 = get_position_wise_common_tokens(models_data[model2][premise], models_data[model2][hypothesis])
 
-                        all_positions = set(common1.keys()) | set(common2.keys()) #get poitions common
+                        all_positions = set(common1.keys()) | set(common2.keys())
                         position_intersections = []
 
                         for pos in all_positions:
-                            common_tokens_m1 = common1.get(pos, set()) #get common tokens PH for this position from first model
-                            common_tokens_m2 = common2.get(pos, set()) #same for the second
-                            intersection = len(common_tokens_m1 & common_tokens_m2)#intersection
-                            position_intersections.append(intersection) #append number
+                            common_tokens_m1 = common1.get(pos, set())
+                            common_tokens_m2 = common2.get(pos, set())
+                            intersection = len(common_tokens_m1 & common_tokens_m2)
+                            position_intersections.append(intersection)
 
-
-                        avg_intersection = np.mean(position_intersections) if position_intersections else 0.0 #average all the numbers
+                        avg_intersection = np.mean(position_intersections) if position_intersections else 0.0
                         problem_overlaps.append(avg_intersection)
 
                 overlap_matrix[i][j] = np.mean(problem_overlaps) if problem_overlaps else 0.0
@@ -220,7 +250,7 @@ def calculate_cross_model_overlaps(models_data, seed_data):
 
 
 
-def analyze_model_overlap_enhanced(file_paths, seed_file_path, pos_tag_name, name_map):
+def analyze_model_overlap_enhanced(file_paths, seed_file_path, pos_tag_name, name_map, verbose):
     """Enhanced token-level analysis"""
     models_data = load_data_matirx(file_paths, pos_tag_name)
     seed_data = load_seed_dataset(seed_file_path)
@@ -245,7 +275,7 @@ def analyze_model_overlap_enhanced(file_paths, seed_file_path, pos_tag_name, nam
                            for s in common_sentences]
                 sentence_overlap_matrix[i][j] = np.mean(overlaps) if overlaps else 0.0
 
-    ph_cross_matrix = calculate_cross_model_overlaps(models_data, seed_data)
+    ph_cross_matrix = calculate_cross_model_overlaps(models_data, seed_data, verbose)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 12))
     display_names = [name_map.get(m, m) for m in model_names]
@@ -261,4 +291,84 @@ def analyze_model_overlap_enhanced(file_paths, seed_file_path, pos_tag_name, nam
     plt.show()
 
     return sentence_overlap_matrix, model_names, ph_cross_matrix
+# def calculate_cross_model_overlaps(models_data, seed_data):
+#     """Calculate cross-model premise-hypothesis overlaps"""
+#     model_names = list(models_data.keys())
+#     n_models = len(model_names)
+#     overlap_matrix = np.zeros((n_models, n_models))
+
+#     for i, model1 in enumerate(model_names):
+#         for j, model2 in enumerate(model_names):
+#             if i == j:
+#                 overlap_matrix[i][j] = calculate_premise_hypothesis_overlap_token_level(models_data, seed_data)[model1]
+#             else:
+#                 problem_overlaps = []
+
+#                 for problem in seed_data:
+#                     premise, hypothesis = problem['premise'], problem['hypothesis']
+
+#                     if all(s in models_data[m] for m in [model1, model2] for s in [premise, hypothesis]):
+#                         common1 = get_position_wise_common_tokens(models_data[model1][premise], models_data[model1][hypothesis]) #get common suggestions for each position bt P and H
+#                         common2 = get_position_wise_common_tokens(models_data[model2][premise], models_data[model2][hypothesis]) #for two models
+
+#                         all_positions = set(common1.keys()) | set(common2.keys()) #get poitions common
+#                         position_intersections = []
+
+#                         for pos in all_positions:
+#                             common_tokens_m1 = common1.get(pos, set()) #get common tokens PH for this position from first model
+#                             common_tokens_m2 = common2.get(pos, set()) #same for the second
+#                             intersection = len(common_tokens_m1 & common_tokens_m2)#intersection
+#                             position_intersections.append(intersection) #append number
+
+
+#                         avg_intersection = np.mean(position_intersections) if position_intersections else 0.0 #average all the numbers
+#                         problem_overlaps.append(avg_intersection)
+
+#                 overlap_matrix[i][j] = np.mean(problem_overlaps) if problem_overlaps else 0.0
+
+#     return overlap_matrix
+
+
+
+# def analyze_model_overlap_enhanced(file_paths, seed_file_path, pos_tag_name, name_map):
+#     """Enhanced token-level analysis"""
+#     models_data = load_data_matirx(file_paths, pos_tag_name)
+#     seed_data = load_seed_dataset(seed_file_path)
+#     model_names = list(models_data.keys())
+
+#     print(f"Loaded models: {model_names}")
+#     print(f"Loaded {len(seed_data)} problems from seed dataset")
+
+#     common_sentences = set.intersection(*[set(models_data[m].keys()) for m in model_names])
+#     print(f"Common sentences across all models: {len(common_sentences)}")
+
+#     n_models = len(model_names)
+#     sentence_overlap_matrix = np.zeros((n_models, n_models))
+
+#     for i, model1 in enumerate(model_names):
+#         for j, model2 in enumerate(model_names):
+#             if i == j:
+#                 averages = [calculate_self_overlap(models_data[model1][s]) for s in common_sentences]
+#                 sentence_overlap_matrix[i][j] = np.mean(averages) if averages else 0.0
+#             else:
+#                 overlaps = [calculate_token_level_overlap(models_data[model1][s], models_data[model2][s])
+#                            for s in common_sentences]
+#                 sentence_overlap_matrix[i][j] = np.mean(overlaps) if overlaps else 0.0
+
+#     ph_cross_matrix = calculate_cross_model_overlaps(models_data, seed_data)
+
+#     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 12))
+#     display_names = [name_map.get(m, m) for m in model_names]
+
+#     disp1 = ConfusionMatrixDisplay(confusion_matrix=sentence_overlap_matrix, display_labels=display_names)
+#     disp1.plot(ax=ax1, cmap='Blues', values_format='.1f')
+#     ax1.set_title(f'Cross-Model Shared Suggestions for {pos_tag_name}s Across Models Per Sentence')
+
+#     disp2 = ConfusionMatrixDisplay(confusion_matrix=ph_cross_matrix, display_labels=display_names)
+#     disp2.plot(ax=ax2, cmap='Greens', values_format='.1f')
+#     ax2.set_title(f'Cross-Model Premise-Hypothesis Common Suggestions for {pos_tag_name}s Per Problem')
+#     plt.savefig(f'confusion_matrix_{pos_tag_name}.pdf', dpi=300, bbox_inches='tight')
+#     plt.show()
+
+#     return sentence_overlap_matrix, model_names, ph_cross_matrix
 
