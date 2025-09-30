@@ -913,7 +913,7 @@ def process_dataset(data_with_suggestions,
       SNLI_filtered_2={key: value for key, value in SNLI_filtered_2.items() if key in if_ids_exist} # if id is in if_ids_exist
       print(f"Filtered length: {len(SNLI_filtered_2)}") #sub-sample
     processed_second_data = pos_toks_extract_from_dataset(SNLI_filtered_2, mapping)
-    seed_dataset, labels_sample = process_unmasked_dataset(processed_second_data, neutral_number, entailment_number, contradiction_number, id='yes')
+    seed_dataset, labels_sample = process_unmasked_dataset(processed_second_data, neutral_number, entailment_number, contradiction_number, id=True)
     expected_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
     actual_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
 
