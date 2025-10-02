@@ -25,7 +25,6 @@ def transform_results(flat_list):
 
   return dict(structured_results)
 
-
 def map_labels_to_numbers(dataset, model_name):
     """
     for item labels converts them to numbers corresponding to each model.
@@ -33,9 +32,8 @@ def map_labels_to_numbers(dataset, model_name):
     #if cretain token is in model name
     #instantiate label_mapping with certain values
     label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
-    if "_bert" in model_name.lower():
+    if "_bert" in model_name.lower() and "varun-v-rao" not in model_name.lower():
         label_mapping = {'entailment': 1, 'neutral':2 , 'contradiction': 0}
-
     new_dataset = []
     for entry in dataset: #  for each entry
 
