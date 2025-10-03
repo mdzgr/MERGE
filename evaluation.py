@@ -32,8 +32,9 @@ def map_labels_to_numbers(dataset, model_name):
     #if cretain token is in model name
     #instantiate label_mapping with certain values
     label_mapping = {'entailment': 0, 'neutral': 1, 'contradiction': 2}
-    if "_bert" in model_name.lower() and "varun-v-rao" not in model_name.lower():
+    if "_bert" in model_name.lower() and "rao_bert" not in model_name.lower():
         label_mapping = {'entailment': 1, 'neutral':2 , 'contradiction': 0}
+
     new_dataset = []
     for entry in dataset: #  for each entry
 
@@ -45,8 +46,8 @@ def map_labels_to_numbers(dataset, model_name):
         except UnboundLocalError:
           print(original_label)
         new_dataset.append(new_entry) # append new entry with converted label
-    return new_dataset # return dataset with converted labels
-
+    return new_dataset 
+  
 def predictions_nli(model_name, model_name_dif_token, data_json_file, batch_size_number, device_g_c, batch_function, tok_model_function):
     #not double-checked
     """
