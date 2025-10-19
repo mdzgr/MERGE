@@ -1230,7 +1230,7 @@ def merge_and_analyze_from_results(
         others=others,
         label_for_shared_suggestions=label_for_shared_suggestions)
 
-def generate_output_filenames(suggestion_file, models_dictionary, pos_dicitonary, number_inflation="10"):
+def generate_output_filenames(suggestion_file, models_dictionary, pos_dicitonary, number_inflation, type_dataset):
     #not double-checked
     """
     IN:
@@ -1249,10 +1249,10 @@ def generate_output_filenames(suggestion_file, models_dictionary, pos_dicitonary
     model_name=models_dictionary.get(model_tested)
     pos_abbrev = pos_dicitonary.get(pos_full.lower(), pos_full.lower())
 
-    output_processed_dataset = f"{model_name}.{model_number}.{pos_abbrev}.{size}.{split_str}.inf.{number_inflation}.json"
-    output_initial = f"{model_name}.{model_number}.{pos_abbrev}.{size}.{split_str}.samp.{number_inflation}.json"
-    output_all_inflated = f"{model_name}.{model_number}.all.{size}.{split_str}.inf.{number_inflation}.json"
-    output_all_sample = f"{model_name}.{model_number}.all.{size}.{split_str}.samp.{number_inflation}.json"
+    output_processed_dataset = f"{model_name}.{model_number}.{pos_abbrev}.{size}.{split_str}{type_dataset}.inf.{number_inflation}.json"
+    output_initial = f"{model_name}.{model_number}.{pos_abbrev}.{size}.{split_str}{type_dataset}.samp.{number_inflation}.json"
+    output_all_inflated = f"{model_name}.{model_number}.all.{size}.{split_str}{type_dataset}.inf.{number_inflation}.json"
+    output_all_sample = f"{model_name}.{model_number}.all.{size}.{split_str}{type_dataset}.samp.{number_inflation}.json"
 
     # Use the full pos tag as pos_to_mask if that's what you need.
     pos_to_mask = pos_full
