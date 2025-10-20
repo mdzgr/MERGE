@@ -1258,3 +1258,49 @@ def generate_output_filenames(suggestion_file, models_dictionary, pos_dicitonary
     pos_to_mask = pos_full
 
     return output_processed_dataset, output_initial, output_all_inflated, output_all_sample, pos_to_mask
+
+def scramble_word(word, rng=None, max_tries=10):
+    """
+    Return a scrambled version of `word` by shuffling its characters.
+    Ensures it's different from the original when possible.
+    """
+    rng = rng or random.Random()
+    if len(word) < 2:
+        return word  # nothing to scramble
+
+    chars = list(word)
+    # try a few times to get a different permutation (if possible)
+    for _ in range(max_tries):
+        rng.shuffle(chars)
+        mixed = ''.join(chars)
+        if mixed != word:
+            return mixed
+    return ''.join(chars)  # fallback (might be same if all chars identical)
+
+def scramble_per_item(item, rng=None):
+    """Scrambles the replacement word in item['id'] and substitutes it in premise/hypothesis."""
+    rng = rng or random.Random()
+
+    id_parts = item["id"].split(":")
+    word_to_change = id_parts[-3]
+
+    mixed_word = scramble_word(word_to_change, rng=rng)
+
+    pattern = re.compile(rf'\b{re.escape(word_to_change)}\b')
+
+    old_premise = item["premise"]
+    old_hypothesis = item["hypothesis"]
+
+    new_premise = pattern.sub(mixed_word, old_premise)
+    new_hypothesis = pattern.sub(mixed_word, old_hypothesis)
+
+    new_id = item["id"] + ":" + mixed_word
+
+    return {
+        "id": new_id,
+        "premise": new_premise,
+        "hypothesis": new_hypothesis,
+        "label": item["label"]
+    }
+
+
