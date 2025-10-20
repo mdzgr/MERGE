@@ -1,30 +1,27 @@
 import json, evaluate
 from collections import Counter, defaultdict
-def transform_results(flat_list):
-  '''formats results into a dictionary with different entries for standard and pattern accuracy'''
-  structured_results = defaultdict(list)
+def transform_results(data_list):
+    """Helper function to transform results into expected format"""
+    result = {}
+    for entry in data_list:
+        model = entry.get("model", "unknown")
+        if model not in result:
+            result[model] = []
 
-  for entry in flat_list: # for each entry
-      model = entry.get("model") # get the model
-      input_file = entry.get("input_file") #get the input file
-      metrics = entry.get("metrics", {}) #get the metrics, otherwise empty dictionary
+        # Transform metrics to pattern_accuracy format
+        pattern_accuracy = {}
+        metrics = entry.get("metrics", {})
+        for key, value in metrics.items():
+            if key.startswith("pattern_accuracy_"):
+                threshold = key.replace("pattern_accuracy_", "")
+                pattern_accuracy[threshold] = value
 
-      pattern_accuracy = {
-          k.replace("pattern_accuracy_", ""): v #replace it with nothing to avoid repetition
-          for k, v in metrics.items() # for keys in metric
-          if k.startswith("pattern_accuracy_") #if the key starts with pattern accuracy
-      }
-      normal_accuracy = metrics.get("normal_accuracy")
-      new_entry = { #store them in a dictionary
-          "input_file": input_file,
-          "normal_accuracy": normal_accuracy,
-          "pattern_accuracy": pattern_accuracy
-      }
+        result[model].append({
+            "input_file": entry.get("input_file", ""),
+            "pattern_accuracy": pattern_accuracy
+        })
 
-      structured_results[model].append(new_entry)
-
-  return dict(structured_results)
-
+    return result
 def map_labels_to_numbers(dataset, model_name):
     """
     for item labels converts them to numbers corresponding to each model.
