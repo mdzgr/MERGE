@@ -465,38 +465,6 @@ def split_nested_dataset_by_origin(input_files, origins=['bert', 'both', 'robert
             avg_entries = total_entries / num_mini_datasets if num_mini_datasets > 0 else 0
             print(f"Saved {output_filename} with {total_entries} entries across {num_mini_datasets} mini datasets. Average: {avg_entries:.2f} entries per mini dataset.")
 
-def scramble_per_item(item):
-    '''scrablmes replacement words and gives back scrambled datasets'''
-    id_parts = item["id"].split(":") #split the id of the
-    word_to_change = id_parts[-3] #get the replacement word
-    pattern = re.compile(rf'(?<![A-Za-z]){re.escape(word_to_change)}(?![A-Za-z])') # !!!!! HAVE TO VERIFY IF SCRAMBALING WORKS WITH THIS PATTERN
-
-    old_premise = item["premise"]
-    old_hypothesis = item["hypothesis"]
-
-    new_premise = pattern.sub(mixed_word, old_premise)
-    new_hypothesis = pattern.sub(mixed_word, old_hypothesis)
-
-    new_id = item["id"] + ":" + mixed_word
-
-    return {
-        "id": new_id,
-        "premise": new_premise,
-        "hypothesis": new_hypothesis,
-        "label": item["label"]
-    }
-
-def scramble_all_data(data_list):
-    """scrambles a list"""
-    results = []
-    for item in data_list: #for each item
-        new_item = scramble_per_item(item) #scramble
-        results.append(new_item)
-    return results
-
-
-
-
 def get_all_matching_keys(data, word_with_pos, pos_list):
   '''match beginning key entries in dicitionary that start with positions of words'''
                                                     # pos_list premise_pos_list [(11, 16)]
