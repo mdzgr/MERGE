@@ -250,6 +250,7 @@ def calculate_cross_model_overlaps(models_data, seed_data, verbose):
 
 
 
+
 def analyze_model_overlap_enhanced(file_paths, seed_file_path, pos_tag_name, name_map, verbose):
     """Enhanced token-level analysis"""
     models_data = load_data_matirx(file_paths, pos_tag_name)
@@ -276,19 +277,46 @@ def analyze_model_overlap_enhanced(file_paths, seed_file_path, pos_tag_name, nam
                 sentence_overlap_matrix[i][j] = np.mean(overlaps) if overlaps else 0.0
 
     ph_cross_matrix = calculate_cross_model_overlaps(models_data, seed_data, verbose)
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 12))
     display_names = [name_map.get(m, m) for m in model_names]
+    # First matrix (Sentence)
+    fig1, ax1 = plt.subplots(figsize=(10, 10))  # much bigger figure
+    disp1 = ConfusionMatrixDisplay(confusion_matrix=sentence_overlap_matrix,
+                                  display_labels=display_names)
+    im1 = disp1.plot(ax=ax1, cmap='Blues', values_format='.1f', colorbar=True)
 
-    disp1 = ConfusionMatrixDisplay(confusion_matrix=sentence_overlap_matrix, display_labels=display_names)
-    disp1.plot(ax=ax1, cmap='Blues', values_format='.1f')
-    ax1.set_title(f'Cross-Model Shared Suggestions for {pos_tag_name}s Across Models Per Sentence')
+    # Make ticks and labels bigger
+    ax1.tick_params(axis='both', labelsize=16)
+    ax1.set_xlabel(ax1.get_xlabel(), fontsize=18)
+    ax1.set_ylabel(ax1.get_ylabel(), fontsize=18)
 
-    disp2 = ConfusionMatrixDisplay(confusion_matrix=ph_cross_matrix, display_labels=display_names)
-    disp2.plot(ax=ax2, cmap='Greens', values_format='.1f')
-    ax2.set_title(f'Cross-Model Premise-Hypothesis Common Suggestions for {pos_tag_name}s Per Problem')
-    plt.savefig(f'confusion_matrix_{pos_tag_name}.pdf', dpi=300, bbox_inches='tight')
-    plt.show()
+    ax1.set_title(
+        'Cross-Model Shared Suggestions Per Sentence',
+        fontsize=22, fontweight='bold', pad=30
+    )
+    fig1.savefig(f'confusion_matrix_{pos_tag_name}_per_sentence.pdf',
+                dpi=300, bbox_inches='tight')
+
+    # Second matrix (Premise-Hypothesis)
+    fig2, ax2 = plt.subplots(figsize=(10, 10))
+    disp2 = ConfusionMatrixDisplay(confusion_matrix=ph_cross_matrix,
+                                  display_labels=display_names)
+    im2 = disp2.plot(ax=ax2, cmap='Greens', values_format='.1f', colorbar=False)
+
+    # Manual colorbar with bigger ticks
+    cbar = fig2.colorbar(im2.im_, ax=ax2, fraction=0.046, pad=0.04)
+    cbar.ax.tick_params(labelsize=16)
+
+    # Make ticks and labels bigger
+    ax2.tick_params(axis='both', labelsize=18)
+    ax2.set_xlabel("", fontsize=22)
+    ax2.set_ylabel("", fontsize=22)
+
+    ax2.set_title(
+        'Cross-Model Intersection of ALL Suggestions \n for Premise-Hypothesis Per Problem',
+        fontsize=22, fontweight='bold', pad=30
+    )
+    fig2.savefig(f'confusion_matrix_{pos_tag_name}_per_problem.pdf',
+                dpi=300, bbox_inches='tight')
 
     return sentence_overlap_matrix, model_names, ph_cross_matrix
 # def calculate_cross_model_overlaps(models_data, seed_data):
