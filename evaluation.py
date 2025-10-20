@@ -46,7 +46,7 @@ def map_labels_to_numbers(dataset, model_name):
         except UnboundLocalError:
           print(original_label)
         new_dataset.append(new_entry) # append new entry with converted label
-    return new_dataset 
+    return new_dataset # return dataset with converted labels
   
 def predictions_nli(model_name, model_name_dif_token, data_json_file, batch_size_number, device_g_c, batch_function, tok_model_function):
     #not double-checked
