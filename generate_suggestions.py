@@ -34,6 +34,8 @@ def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
     for i, (token, pos) in enumerate(zip(tokens, pos_tags)):
         if pos not in valid_tags or token in ignore:
           continue
+        if pos_type == "verb" and i + 1 < len(tokens) and tokens[i+1] == "n't":
+          continue
 
         pattern = r'\b' + re.escape(token) + r'\b'
         matches = list(re.finditer(pattern, sentence))
