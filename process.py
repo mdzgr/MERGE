@@ -728,7 +728,7 @@ def process_matching_keys(data, sentence, word_with_pos, all_matching_keys,
           diff_total += (len_before - len_after)                                          # for each occurance of a word replaced, calculate how big is the diff
           if len(cleaned_list) == 0:                                                      #if no suggestions left, continue
               continue
-          average_prob_suggestions += sum(float(c.split(":")[1]) for c in cleaned_list) / len(cleaned_list) #sum the probabilityies and divide them by the length of the list
+          average_prob_suggestions += sum(float(c.split(":")[1]) for c in cleaned_list if c.split(":")[1] != '') / len(cleaned_list)  #sum the probabilityies and divide them by the length of the list
       if prob == "yes":
           try:
               original_prob = float(k.split(":")[2])
