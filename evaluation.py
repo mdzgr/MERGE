@@ -44,7 +44,7 @@ def map_labels_to_numbers(dataset, model_name):
           print(original_label)
         new_dataset.append(new_entry) # append new entry with converted label
     return new_dataset # return dataset with converted labels
-  
+
 def predictions_nli(model_name, model_name_dif_token, data_json_file, batch_size_number, device_g_c, batch_function, tok_model_function):
     #not double-checked
     """
@@ -77,7 +77,7 @@ def predictions_nli(model_name, model_name_dif_token, data_json_file, batch_size
     output_filename = f"{data_json_file.rsplit('.', 1)[0]}_{model_name_dif_token}_predictions.json"
     with open(output_filename, "w") as f:
         json.dump(output, f, indent=4, default=lambda o: o.item() if hasattr(o, "item") else o)
-    return output, output_filename
+    return output, output_filename, model_cpu, tokenizer
 def merge_data_and_predictions(data_json_file, predictions_file, model_name, model_name_dif_tok):
     #not double-checked
     '''merges documents of the inflated dataset and the predictions from the model by zipping the data from json'''
@@ -94,21 +94,20 @@ def merge_data_and_predictions(data_json_file, predictions_file, model_name, mod
         print(f"Warning: Number of data items ({len(data)}) and predictions ({len(predictions)}) do not match.")
     for original, pred in zip(data, predictions):
         merged_entry = {
-            'input_file': file_name,
-            'model': model,
             'id': original.get('id'),
-            'premise': original.get('premise'),
-            'hypothesis': original.get('hypothesis'),
             'gold_label': original.get('label'),
-            'label_index': pred.get('label_index'),
             'label': pred.get('label'),
-            'prob': pred.get('prob'),
             'probs': pred.get('probs')
         }
         merged.append(merged_entry)
+    compact={
+        "input_file": file_name,
+        "model": model,
+        "items": merged
+    }
     output_filename = data_json_file.rsplit('.', 1)[0] + '_merged.json'
     with open(output_filename, 'w') as f:
-        json.dump(merged, f, indent=4)
+        json.dump(compact, f, indent=2)
 
 
     return merged, output_filename
@@ -223,7 +222,7 @@ def compute_all_metrics(data_path_list, name, dictionary_result, type_evaluation
                 print(f"  Threshold {threshold}: {acc}")
 
   return dictionary_result
-  
+
 def get_base_ids_pos(filepath):
     """Reads a JSON file and extracts the first part of the 'id' for each entry."""
     try:
