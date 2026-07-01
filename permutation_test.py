@@ -1,4 +1,4 @@
-from utils (1) import *
+from utils import *
 def re_arrage_LLM_data_for_accuracy(file_name_predictions_, file_name_gold):
   '''{
   "seed": {
