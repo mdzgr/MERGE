@@ -1,4 +1,3 @@
-#re-factored code have to still re write the descirption of each function
 import re
 import torch
 import torch.nn.functional as F
@@ -44,9 +43,8 @@ def return_offset_preceding_text(token_counts_dictionary, matches, token, senten
     token_counts_dictionary[token] += 1
     occurrence_index = token_counts_dictionary[token]
     matchy = matches[occurrence_index - 1]
-    preceding_text = sentence[:matchy.start()]
-    offset = (len(preceding_text), len(preceding_text) + len(token))
-    return offset, preceding_text
+    offset = (len(sentence[:matchy.start()]), len(sentence[:matchy.start()]) + len(token))
+    return offset, sentence[:matchy.start()]
 
 
 def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
@@ -60,9 +58,7 @@ def extract__pos_position(pos_tags, tokens, source, pos_type, sentence):
 
         offset, preceding_text = return_offset_preceding_text(token_counts, matches, token, sentence)
         if token not in dictionary_positions:
-            dictionary_positions[token] = {
-                'positions': [offset], 'pos': pos, 'source': source, 'preceding_text': preceding_text
-            }
+            dictionary_positions[token] = {'positions': [offset], 'pos': pos, 'source': source, 'preceding_text': preceding_text}
         else:
             dictionary_positions[token]['positions'].append(offset)
 
@@ -126,8 +122,6 @@ def generate_mask_predictions(model, tokenizer, context, mask_token, target_word
     return prediction_list, target_probability
 
 
-
-
 def extract_pos_words(pos_tags, tokens, pos_type):
   '''from category to pos tags'''
   tags = return_pos_tag_for_class(pos_type)
@@ -146,8 +140,7 @@ def meets_agreement_and_length(problem, annotators_agreement_number, length_prem
 
 def shared_pos_words(problem, mapping, pos_to_mask):
     '''words of pos_to_mask shared between premise and hypothesis'''
-    premise = mapping[problem['p']]
-    hypothesis = mapping[problem['h']]
+    premise, hypothesis = mapping[problem['p']], mapping[problem['h']]
     premise_words = extract_pos_words(premise['pos'], premise['tok'], pos_to_mask)
     hypothesis_words = extract_pos_words(hypothesis['pos'], hypothesis['tok'], pos_to_mask)
     return premise_words & hypothesis_words
@@ -231,12 +224,12 @@ def is_sentence_fully_processed(sentence, filler_data, common_tokens_dictionary)
   return required_keys.issubset(existing_keys)
 
 def common(sentence1, sentence2, pos_sent_1, pos_sent_2, toks_sent_1, toks_sent_2, pos_type, source_1, source_2, singles='yes'):
-            # extracted_1 {'black': {'positions': [(11, 16)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a '}, 'commercial': {'positions': [(29, 39)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a black shirt, in a '}}
-            # extracted_2 {'black': {'positions': [(13, 18)], 'pos': 'JJ', 'source': 'hypthesis', 'preceding_text': 'A woman in a '}, 'commercial': {'positions': [(31, 41)], 'pos': 'JJ', 'source': 'hypthesis', 'preceding_text': 'A woman in a black shirt, in a '}}
-            # common tokens {'black', 'commercial'}
-            # common dict {'black': {'positions': [(11, 16)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a '}, 'commercial': {'positions': [(29, 39)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a black shirt, in a '}}
-            # mask positions 1 [[(11, 16)], [(29, 39)]]
-            # mask positions 2 [[(13, 18)], [(31, 41)]]
+    ''''extracted_1 {'black': {'positions': [(11, 16)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a '}, 'commercial': {'positions': [(29, 39)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a black shirt, in a '}}
+      extracted_2 {'black': {'positions': [(13, 18)], 'pos': 'JJ', 'source': 'hypthesis', 'preceding_text': 'A woman in a '}, 'commercial': {'positions': [(31, 41)], 'pos': 'JJ', 'source': 'hypthesis', 'preceding_text': 'A woman in a black shirt, in a '}}
+      common tokens {'black', 'commercial'}
+      common dict {'black': {'positions': [(11, 16)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a '}, 'commercial': {'positions': [(29, 39)], 'pos': 'JJ', 'source': 'premise', 'preceding_text': 'A man in a black shirt, in a '}}
+      mask positions 1 [[(11, 16)], [(29, 39)]]
+      mask positions 2 [[(13, 18)], [(31, 41)]]'''
 
     extracted_1 = extract__pos_position(pos_sent_1, toks_sent_1, source_1, pos_type, sentence1)
     extracted_2 = extract__pos_position(pos_sent_2, toks_sent_2, source_2, pos_type, sentence2)
@@ -254,7 +247,7 @@ def return_offset_key(offset, probability_masked_word):
 
 def return_masked_token(input_str, i, j):
         return input_str[i:j]
-      
+
 def return_offse_key_1(i, j):
   return str(i)+':'+str(j)
 
@@ -309,13 +302,13 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
         Returns a dictionary with character offsets as keys and a list of ranked suggestions as values.
     """
     mask_token = tokenizer.mask_token
-   
+
     suggestions = {}
     mask_off_flat= [i for w in mask_offsets for i in w]
 
     for i, j in mask_off_flat:
       candidate_list = []
-      
+
       masked_input, masked_token_orig, pos_tag, offset_key = return_mask_tok_off_pos_mask_in(input_str, i, j, common_tokens, mask_token)
       masked_input, masked_token_orig = return_inp_tok_spacing_tokenizer(masked_input, mask_token, masked_token_orig)
 
@@ -323,13 +316,13 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
 
       masked_token_orig = strip_sapce_from_mask_tok(mask_token, masked_input, masked_token_orig)
       offset_key=return_offset_key(offset_key, probability_masked_word)
-      
-      
+
+
       for k in generated:
           candidate_list.append(return_processed_suggestions(k))
-   
+
       assert_length_candidates(candidate_list, suggestion_n, input_str)
-      
+
       suggestions = add_suggestion(suggestions, masked_token_orig, pos_tag, offset_key, candidate_list)
     return suggestions
 
@@ -346,7 +339,7 @@ def merge_filler_results(results_dict, sentence, off_filler):
     return results_dict
 
 
-def create_filler_file(
+def create_filler_file( #this also needs to be split or find an altenrative
     model_name: str,
     dataset: pd.DataFrame,
     split: str,
@@ -371,7 +364,6 @@ def create_filler_file(
     modifying_function:bool=None,
     output_file: str = None,
 ):
-#not double-checked
     """
         Function generating a new inflated dataset with suggestion from a language model, alongside the initial split of sentences modified
 
@@ -392,8 +384,6 @@ def create_filler_file(
         output_file : str /// file name where the masked dataset will be saved
         #returns the list of processed sentences with ids and a sepearte file with the suggestions
     """
-
-    label_counts = {'contradiction': 0, 'entailment': 0, 'neutral': 0}
     results_dict = {}
 
     dataset = dataset[split]
@@ -415,4 +405,6 @@ def create_filler_file(
 
     create_json_from_data(results_dict, output_file)
     return seed_dataset, results_dict
+
+
 
