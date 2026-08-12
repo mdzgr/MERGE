@@ -1392,7 +1392,7 @@ def maybe_merge_datasets(merge_datasets, pos_to_mask, formation_type, processed_
                                      label_type_aggregation_across_models, name_pos_files,
                                      output_directory)
         merged_by_pos[pos] = pos_return
-    return pos_return
+    return merged_by_pos
 
 def assert_problem_in_one_of_the_datasets():
   print('premise and hypothesis not in any of the 3 datasets, check if the p and h are part of the same problem or part of SNLI-test and MNLI-/m and -mm dev')
