@@ -1464,7 +1464,7 @@ def merged_print_demo(merged):
     for pos, items in merged.items():
         print(f"=== POS: {pos} ===")
         for i in items:
-            print('THE ID', i['id'])
+            #print('THE ID', i['id'])
             print('the premise', i['premise'])
             print('the hypothesis', i['hypothesis'])
             print('the label', i['label'])
