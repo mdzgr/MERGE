@@ -12,7 +12,11 @@ MERGE is a methodology for generating variants of NLI problems by replacing shar
 - **`utils.py`:** Functions for data processing and evaluation.
 - **variants(`.zip`):** Archive of the generated variants used in the paper.
 
-## Generating variants
 
-For the demo notebook you will need to download the required source datasets and place them in an `nlp_data` folder in your Google Drive.
+## Run the demo in Google Colab
+
+1. To run the demo, acess [demo notebook](https://colab.research.google.com/drive/1fBJV2a6zJPUd7QU1QE04LF0mB697ogtk?usp=sharing).
+2. Follow the dataset download instructions in the notebook.
+
+To generate variants for the demo notebook you will need to download the required source datasets and place them in an `nlp_data` folder in your Google Drive.
 
