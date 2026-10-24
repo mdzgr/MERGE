@@ -1505,11 +1505,11 @@ def merge_demo(NLI_problem_p, NLI_problem_H, model_cards, pos_tags, minimum_vari
     prob_value, pos_value = return_config_for_formation()[formation_type_user]
     formation_type_formatted = register_eval_type(formation_type_user, et_settings['pos_tag_scope'], et_settings['replacement_scope'], et_settings['folder_ouptut'], minimum_variants)
     with tqdm(total=1, desc="Loading datasets") as bar:
-    with capture_output():
-        dataset_name, dataset_item, item_id, mapping = (
-            return_data_for_1_problem_demo(NLI_problem_p, NLI_problem_H)
-        )
-    bar.update(1)
+        with capture_output():
+            dataset_name, dataset_item, item_id, mapping = (
+                return_data_for_1_problem_demo(NLI_problem_p, NLI_problem_H)
+            )
+        bar.update(1)
     if dataset_name is None:
         return None, None, None
     split = return_splits_per_dataset(dataset_name)
