@@ -412,7 +412,7 @@ def create_filler_file( #this also needs to be split or find an altenrative
 
     seed_dataset, lab = process_unmasked_dataset(filtered_list_1, 'neutral', 'entailment', 'contradiction', include_id=add_id_to_dataset)
     model, tokenizer = return_model_tok(model_name)
-    for p in tqdm(filtered_list_1, , disable=True):
+    for p in tqdm(filtered_list_1, disable=True):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h = (p['id'], p['premise'], p['hypothesis'], p['p_t'], p['p_p'], p['h_t'], p['h_p'] )
         if id_mock_test and id != id_mock_test:
           continue
