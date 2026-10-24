@@ -1217,7 +1217,7 @@ def process_dataset(data_with_suggestions,
 
     expected_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
 
-    for entry in tqdm(problems_w_pos_tok, diasble=True):
+    for entry in tqdm(problems_w_pos_tok, disable=True):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h, label = unpack_entry_dataset(entry)
         if mock_test and id != mock_test:
           continue
