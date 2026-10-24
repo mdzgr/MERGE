@@ -7,6 +7,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 import pandas as pd
 from MERGE.utils import *
+from IPython.utils.capture import capture_output
 from assigntools.LoLa.read_nli import (
     snli_jsonl2dict,
     sen2anno_from_nli_problems
@@ -329,8 +330,10 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
 
 
 def return_model_tok(model_name):
-  return AutoModelForMaskedLM.from_pretrained(model_name), AutoTokenizer.from_pretrained(model_name)
-
+    with capture_output():
+        model = AutoModelForMaskedLM.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+    return model, tokenizer
 
 def merge_filler_results(results_dict, sentence, off_filler):
     '''adds off_filler under results_dict[sentence], creating the entry if needed,
@@ -1499,7 +1502,9 @@ def merge_demo(NLI_problem_p, NLI_problem_H, model_cards, pos_tags, minimum_vari
     pd_settings, et_settings, mm_settings, nlp, create_replacements_config = standard_settings_demo()
     prob_value, pos_value = return_config_for_formation()[formation_type_user]
     formation_type_formatted = register_eval_type(formation_type_user, et_settings['pos_tag_scope'], et_settings['replacement_scope'], et_settings['folder_ouptut'], minimum_variants)
-    dataset_name, dataset_item, item_id, mapping = return_data_for_1_problem_demo(NLI_problem_p, NLI_problem_H)
+    print("Load datasets", flush=True)
+    with capture_output():
+        dataset_name, dataset_item, item_id, mapping = return_data_for_1_problem_demo(NLI_problem_p, NLI_problem_H)
     if dataset_name is None:
         return None, None, None
     split = return_splits_per_dataset(dataset_name)
@@ -1507,9 +1512,9 @@ def merge_demo(NLI_problem_p, NLI_problem_H, model_cards, pos_tags, minimum_vari
     seed_dataset, _ = process_unmasked_dataset(item_data_plus_tok_pos, 'neutral', 'entailment', 'contradiction', include_id=True)
     processed_results = {}
 
-    for model_card in model_cards:
+    for model_number, model_card in enumerate(model_cards, start=1):
         model_name_ = return_name_models_suggestions()[model_card]
-        print('PROCESSING MODEL', model_name_)
+        print(f"Load model {model_number}", flush=True)
         for pos_to_mask in pos_tags:
 
             _, dict_res_new = create_filler_file(
