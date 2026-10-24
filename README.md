@@ -20,3 +20,9 @@ MERGE is a methodology for generating variants of NLI problems by replacing shar
 
 To generate variants for the demo notebook you will need to download the required source datasets and place them in an `nlp_data` folder in your Google Drive.
 
+## Citation
+
+Use the following citation if using the variants, code or paper:
+
+MERGE: Minimal Expression-Replacement GEneralization Test for Natural Language Inference. BlackboxNLP 2026 [to be updated].
+
