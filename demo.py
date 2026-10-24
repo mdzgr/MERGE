@@ -8,6 +8,7 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM
 import pandas as pd
 from MERGE.utils import *
 from IPython.utils.capture import capture_output
+from transformers.utils import logging as transformers_logging
 from assigntools.LoLa.read_nli import (
     snli_jsonl2dict,
     sen2anno_from_nli_problems
@@ -195,7 +196,7 @@ def process_unmasked_dataset(filtered_list_1, neutral_number, entailment_number,
         new_list4.append(entry)
 
     label_counts = Counter(item['label'] for item in filtered_list_1)
-    print("Label counts inside loop:", dict(label_counts))
+    #print("Label counts inside loop:", dict(label_counts))
     return new_list4, dict(label_counts)
 
 
@@ -330,6 +331,7 @@ def suggest_mask_fillers(input_str:str, mask_offsets: List[Tuple[int,int]],
 
 
 def return_model_tok(model_name):
+    transformers_logging.set_verbosity_error()
     with capture_output():
         model = AutoModelForMaskedLM.from_pretrained(model_name)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
