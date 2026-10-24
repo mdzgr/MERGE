@@ -214,7 +214,7 @@ def pos_toks_extract_from_dataset(list_filtered, mapping):
       }
       for k, p in list_filtered.items()
   ]
-  print(f"no. problems filtered after criteria: {len(filtered_list_1)}")
+  #print(f"n=No. problems filtered after criteria [should be one]: {len(filtered_list_1)}")
   return filtered_list_1
 
 
@@ -657,15 +657,15 @@ def compute_dataset_stats(final_dataset):
 
 
 def print_dataset_report(dual_print, qualified_base_ids, final_dataset, min_count, source_counts, total_instances, average_per_source, label_counts):
-    dual_print(f"Qualified seeds (count >= {min_count}): {len(qualified_base_ids)}")
-    dual_print(f"Length dataset {len(final_dataset)}",f" Length per origin model: {total_instances}")
-    dual_print(f"Source counts: {dict(source_counts)}")
+    #dual_print(f"Qualified seeds (count >= {min_count}): {len(qualified_base_ids)}")
+    dual_print(f"Number of final replacements {len(final_dataset)}")
+    dual_print(f"Raw number of replacements per model: {dict(source_counts)}")
 
-    dual_print("=== Label Counts in Final Dataset ===")
+    dual_print("=== Label Counts [should be all of the same label for demo] ===")
     for label, count in label_counts.items():
         dual_print(f"{label}: {count}")
 
-    dual_print("\n=== Average Instances per Source ===")
+    dual_print("\n=== Perctenages of Replacements per Source ===")
     for src, avg in average_per_source.items():
         dual_print(f"{src}: {avg:.2f}")
 
@@ -694,14 +694,14 @@ def merge_and_analyze_datasets(dataset1, source1, dataset2, source2, pos_name_fi
     Function that merges datasets of several models
     Keeps suggestions for one replacement only if that replacement has sufficient variants
     '''
-    print(f"dataset1 size={len(dataset1)}; dataset2 size={len(dataset2)}")
+    print(f"Suggestions from model 1={len(dataset1)}; Suggestions from model 2={len(dataset2)}")
 
     all_pairs = [(dataset1, source1), (dataset2, source2)]
     if others:
         all_pairs.extend(others)
 
     ids_across_datasets = return_ids_across_datasets(all_pairs)
-    print(f"ids_across_datasets size={len(ids_across_datasets)}")
+    print(f"All suggestions={len(ids_across_datasets)}")
     word_pos_lookup = return_word_pos_lookup(ids_across_datasets)
 
     renamed = rename_items(all_pairs, word_pos_lookup, opposite, label_for_shared_suggestions)
@@ -1502,9 +1502,12 @@ def merge_demo(NLI_problem_p, NLI_problem_H, model_cards, pos_tags, minimum_vari
     pd_settings, et_settings, mm_settings, nlp, create_replacements_config = standard_settings_demo()
     prob_value, pos_value = return_config_for_formation()[formation_type_user]
     formation_type_formatted = register_eval_type(formation_type_user, et_settings['pos_tag_scope'], et_settings['replacement_scope'], et_settings['folder_ouptut'], minimum_variants)
-    print("Load datasets", flush=True)
+    with tqdm(total=1, desc="Loading datasets") as bar:
     with capture_output():
-        dataset_name, dataset_item, item_id, mapping = return_data_for_1_problem_demo(NLI_problem_p, NLI_problem_H)
+        dataset_name, dataset_item, item_id, mapping = (
+            return_data_for_1_problem_demo(NLI_problem_p, NLI_problem_H)
+        )
+    bar.update(1)
     if dataset_name is None:
         return None, None, None
     split = return_splits_per_dataset(dataset_name)
