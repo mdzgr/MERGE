@@ -9,6 +9,9 @@ import pandas as pd
 from MERGE.utils import *
 from IPython.utils.capture import capture_output
 from transformers.utils import logging as transformers_logging
+import logging
+
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 from assigntools.LoLa.read_nli import (
     snli_jsonl2dict,
     sen2anno_from_nli_problems
@@ -20,6 +23,16 @@ from assigntools.LoLa.deep_nli import (
     load_tok_model
 )
 
+from collections import Counter, defaultdict
+from wordfreq import zipf_frequency
+from contextlib import redirect_stdout
+import string, json, os, re, random
+from tqdm import tqdm
+import sys, contextlib
+from functools import partial
+from itertools import chain
+import string
+import spacy
 
 def return_pos_tag_for_class(class_pos):
   '''returns a set of accepted pos tags for each open class'''
@@ -185,7 +198,7 @@ def process_unmasked_dataset(filtered_list_1, neutral_number, entailment_number,
     '''
     label_to_number={'neutral': neutral_number, 'entailment': entailment_number, 'contradiction':contradiction_number}
     new_list4 = []
-    for item in tqdm(filtered_list_1):
+    for item in tqdm(filtered_list_1, disable=True):
         entry = {
             'premise': item['premise'],
             'hypothesis': item['hypothesis'],
@@ -399,7 +412,7 @@ def create_filler_file( #this also needs to be split or find an altenrative
 
     seed_dataset, lab = process_unmasked_dataset(filtered_list_1, 'neutral', 'entailment', 'contradiction', include_id=add_id_to_dataset)
     model, tokenizer = return_model_tok(model_name)
-    for p in tqdm(filtered_list_1):
+    for p in tqdm(filtered_list_1, , disable=True):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h = (p['id'], p['premise'], p['hypothesis'], p['p_t'], p['p_p'], p['h_t'], p['h_p'] )
         if id_mock_test and id != id_mock_test:
           continue
@@ -432,18 +445,6 @@ def return_dataset_mapping_function(name_dataset): ###this has to be updated in 
                           'mnli_mismatched': 'multinli'}
     dataset, S2A = snli_jsonl2dict(return_dictionary_datasets(name_dataset), name_codes.get(name_dataset), dictionary_type_dataset, names_datasets_files)
     return dataset, S2A
-
-from collections import Counter, defaultdict
-from wordfreq import zipf_frequency
-from contextlib import redirect_stdout
-#from MERGE.generate_suggestions import filter_snli, pos_toks_extract_from_dataset, process_unmasked_dataset, common
-import string, json, os, re, random
-from tqdm import tqdm
-import sys, contextlib
-from functools import partial
-from itertools import chain
-import string
-import spacy
 
 def excluded_words_default():
   return {"n't", "not", "no", "never", "neither", "none", "nowise", "nothing", "nobody", "nowhere", "non", "absent", "lacking", "minus", "without", "'s", "'n'", "'re", "'m"}
@@ -659,17 +660,17 @@ def compute_dataset_stats(final_dataset):
 
 
 def print_dataset_report(dual_print, qualified_base_ids, final_dataset, min_count, source_counts, total_instances, average_per_source, label_counts):
-    #dual_print(f"Qualified seeds (count >= {min_count}): {len(qualified_base_ids)}")
-    dual_print(f"Number of final replacements {len(final_dataset)}")
-    dual_print(f"Raw number of replacements per model: {dict(source_counts)}")
+    #dual_print(f"Qualified seeds (count >= {min_count}): {len(qualified_base_ids)}\n")
+    dual_print(f"Number of final replacements {len(final_dataset)}\n")
+    dual_print(f"Raw number of replacements per model: {dict(source_counts)}\n")
 
     dual_print("=== Label Counts [should be all of the same label for demo] ===")
     for label, count in label_counts.items():
         dual_print(f"{label}: {count}")
 
-    dual_print("\n=== Perctenages of Replacements per Source ===")
+    dual_print("\n=== Percentages of Replacements per source Masked Language Model===")
     for src, avg in average_per_source.items():
-        dual_print(f"{src}: {avg:.2f}")
+        dual_print(f"{src}: {avg:.2f}\n\n")
 
 
 def compute_and_report_stats(renamed, pos_name_file_name, type, min_count):
@@ -703,7 +704,7 @@ def merge_and_analyze_datasets(dataset1, source1, dataset2, source2, pos_name_fi
         all_pairs.extend(others)
 
     ids_across_datasets = return_ids_across_datasets(all_pairs)
-    print(f"All suggestions={len(ids_across_datasets)}")
+    print(f"All suggestions passing probability and plausibility criteria={len(ids_across_datasets)}")
     word_pos_lookup = return_word_pos_lookup(ids_across_datasets)
 
     renamed = rename_items(all_pairs, word_pos_lookup, opposite, label_for_shared_suggestions)
@@ -1216,7 +1217,7 @@ def process_dataset(data_with_suggestions,
 
     expected_generation = {'neutral': 0, 'entailment': 0, 'contradiction': 0}
 
-    for entry in tqdm(problems_w_pos_tok):
+    for entry in tqdm(problems_w_pos_tok, diasble=True):
         id, premise, hypothesis, tok_p, pos_p, tok_h, pos_h, label = unpack_entry_dataset(entry)
         if mock_test and id != mock_test:
           continue
