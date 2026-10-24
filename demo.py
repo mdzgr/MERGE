@@ -670,8 +670,8 @@ def print_dataset_report(dual_print, qualified_base_ids, final_dataset, min_coun
 
     dual_print("\n=== Percentages of Replacements per source Masked Language Model===")
     for src, avg in average_per_source.items():
-        dual_print(f"{src}: {avg:.2f}\n\n")
-
+        dual_print(f"{src}: {avg:.2f}")
+    dual_print('\n')
 
 def compute_and_report_stats(renamed, pos_name_file_name, type, min_count):
     """Filter renamed items by min_count, print/save stats, return final dataset."""
@@ -697,14 +697,14 @@ def merge_and_analyze_datasets(dataset1, source1, dataset2, source2, pos_name_fi
     Function that merges datasets of several models
     Keeps suggestions for one replacement only if that replacement has sufficient variants
     '''
-    print(f"Suggestions from model 1={len(dataset1)}; Suggestions from model 2={len(dataset2)}")
+    print(f"Suggestions after quality filtering from model 1={len(dataset1)}; Suggestions from model 2={len(dataset2)}")
 
     all_pairs = [(dataset1, source1), (dataset2, source2)]
     if others:
         all_pairs.extend(others)
 
     ids_across_datasets = return_ids_across_datasets(all_pairs)
-    print(f"All suggestions passing probability and plausibility criteria={len(ids_across_datasets)}")
+    print(f"Total suggestions={len(ids_across_datasets)}")
     word_pos_lookup = return_word_pos_lookup(ids_across_datasets)
 
     renamed = rename_items(all_pairs, word_pos_lookup, opposite, label_for_shared_suggestions)
@@ -1520,7 +1520,7 @@ def merge_demo(NLI_problem_p, NLI_problem_H, model_cards, pos_tags, minimum_vari
 
     for model_number, model_card in enumerate(model_cards, start=1):
         model_name_ = return_name_models_suggestions()[model_card]
-        print(f"Load model {model_number}", flush=True)
+        print(f"\nLoaded model {model_number}", flush=True)
         for pos_to_mask in pos_tags:
 
             _, dict_res_new = create_filler_file(
