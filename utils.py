@@ -554,6 +554,7 @@ def scores_threshold_comparison(scores, threshold):
   '''returns 1 if accuracy is bigger than a threshold'''
   return 1 if accuracy_calculation(scores, None)>= threshold else 0
 
+
 def PA_score(predictions_by_id, subsampled_variants_initial, thresholds):
     thresholds_scores = {}
     #for each threshold in a list of threshold have an operation
@@ -578,12 +579,6 @@ def mutate_items_to_ids(type_eval, data, key_name_special):
         if type_eval == key_name_special
         else {type_eval: return_id_list_items(data)}
     )
-# def group_items_by_base_id(data_nested_by_id):
-#     '''returns dict of which elements are id.split: item'''
-#     subsampled_variants_initial = defaultdict(list)
-#     for k, v in data_nested_by_id.items():
-#         subsampled_variants_initial[k] = build_id_lookup(v, 'base')
-#     return subsampled_variants_initial
 
 def group_items_by_base_id(data_nested_by_id):
     subsampled_variants_initial = defaultdict(list)
@@ -639,29 +634,6 @@ def return_look_up_id_gold_label_label_index(preds):
   return {r['id']: {'gold_label': r['gold_label'], 'label_index': r['label_index']} for r in preds['items']}
 
 
-def majority_predictions_by_base_id(preds):
-    """Return predictions with majority label_index per base ID."""
-    counts = defaultdict(Counter)
-
-    for item in preds["items"]:
-        base_id = item["id"].split(":")[0]
-        counts[base_id][item["label_index"]] += 1
-
-    majority = {
-        base_id: labels.most_common(1)[0][0]
-        for base_id, labels in counts.items()
-    }
-
-    return {
-        **preds,
-        "items": [
-            {
-                **item,
-                "label_index": majority[item["id"].split(":")[0]]
-            }
-            for item in preds["items"]
-        ]
-    }
 def load_and_process_model_preditcions(directory, model_names, processor):
     '''
     a list of models
@@ -677,6 +649,26 @@ def load_and_process_model_preditcions(directory, model_names, processor):
         results[model] = processor(data)
 
     return results
+from collections import Counter
+
+def PA_majority_score(predictions_by_id, subsampled_variants_initial):
+    scores_per_minidataset = {}
+
+    for dataset, groups in subsampled_variants_initial.items():
+        group_scores = []
+
+        for item_ids in groups:
+            labels = [predictions_by_id[item_id]["label_index"] for item_id in item_ids]
+            voted_label = Counter(labels).most_common(1)[0][0]
+
+            gold_label = predictions_by_id[item_ids[0]]["gold_label"]
+            group_scores.append(int(voted_label == gold_label))
+
+        scores_per_minidataset[dataset] = accuracy_calculation(
+            group_scores, None
+        )
+
+    return accuracy_calculation(scores_per_minidataset, True)
 
 def model_scores_function(small_file_name, all_model_predictions, names_models, data_nested_by_id, subsampled_variants_initial, thresholds):
     model_scores, SA_scores, PA_scores = {}, {}, {}
@@ -689,6 +681,7 @@ def model_scores_function(small_file_name, all_model_predictions, names_models, 
 
         SA_scores[model] = accuracy_calculation(SA_all_small_datasets, True)
         PA_scores[model] = PA_score(predictions_by_id, subsampled_variants_initial, thresholds)
+        PA_scores[model]["majority"] = PA_majority_score(predictions_by_id, subsampled_variants_initial)
     return {small_file_name: {"normal_accuracy": SA_scores, "PA_scores": PA_scores}}
 
 def return_name_files_predictions(seed_var_test, split, type_var, folder_predictions, folder_nested, type_pos=None):
