@@ -578,11 +578,24 @@ def mutate_items_to_ids(type_eval, data, key_name_special):
         if type_eval == key_name_special
         else {type_eval: return_id_list_items(data)}
     )
+# def group_items_by_base_id(data_nested_by_id):
+#     '''returns dict of which elements are id.split: item'''
+#     subsampled_variants_initial = defaultdict(list)
+#     for k, v in data_nested_by_id.items():
+#         subsampled_variants_initial[k] = build_id_lookup(v, 'base')
+#     return subsampled_variants_initial
+
 def group_items_by_base_id(data_nested_by_id):
-    '''returns dict of which elements are id.split: item'''
     subsampled_variants_initial = defaultdict(list)
-    for k, v in data_nested_by_id.items():
-        subsampled_variants_initial[k] = build_id_lookup(v, 'base')
+
+    for dataset, item_ids in data_nested_by_id.items():
+        grouped = defaultdict(list)
+
+        for item_id in item_ids:
+            grouped[split_to_get_base_id(item_id)].append(item_id)
+
+        subsampled_variants_initial[dataset] = list(grouped.values())
+
     return subsampled_variants_initial
 
 def get_last_element_of_id(item_id):
