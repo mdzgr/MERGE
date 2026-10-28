@@ -645,7 +645,7 @@ def load_and_process_model_preditcions(directory, model_names, processor):
 
     for model in model_names:
         data = load_data(f"{directory}{model}.json")
-        data = majority_predictions_by_base_id(data)
+        #data = majority_predictions_by_base_id(data)
         results[model] = processor(data)
 
     return results
