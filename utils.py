@@ -626,7 +626,29 @@ def return_look_up_id_gold_label_label_index(preds):
   return {r['id']: {'gold_label': r['gold_label'], 'label_index': r['label_index']} for r in preds['items']}
 
 
+def majority_predictions_by_base_id(preds):
+    """Return predictions with majority label_index per base ID."""
+    counts = defaultdict(Counter)
 
+    for item in preds["items"]:
+        base_id = item["id"].split(":")[0]
+        counts[base_id][item["label_index"]] += 1
+
+    majority = {
+        base_id: labels.most_common(1)[0][0]
+        for base_id, labels in counts.items()
+    }
+
+    return {
+        **preds,
+        "items": [
+            {
+                **item,
+                "label_index": majority[item["id"].split(":")[0]]
+            }
+            for item in preds["items"]
+        ]
+    }
 def load_and_process_model_preditcions(directory, model_names, processor):
     '''
     a list of models
@@ -638,6 +660,7 @@ def load_and_process_model_preditcions(directory, model_names, processor):
 
     for model in model_names:
         data = load_data(f"{directory}{model}.json")
+        data = majority_predictions_by_base_id(data)
         results[model] = processor(data)
 
     return results
